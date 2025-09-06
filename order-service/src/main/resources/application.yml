@@ -1,0 +1,101 @@
+server:
+  port: ${SERVER_PORT:8083}
+
+spring:
+  application:
+    name: ${SPRING_APPLICATION_NAME:order-service}
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ecommerce_order}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.postgresql.Driver}
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:true}
+    properties:
+      hibernate:
+        dialect: ${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT:org.hibernate.dialect.PostgreSQLDialect}
+        format_sql: ${SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL:true}
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: ${SPRING_KAFKA_PRODUCER_KEY_SERIALIZER:org.apache.kafka.common.serialization.StringSerializer}
+      value-serializer: ${SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER:org.springframework.kafka.support.serializer.JsonSerializer}
+    consumer:
+      group-id: ${SPRING_KAFKA_CONSUMER_GROUP_ID:order-service}
+      key-deserializer: ${SPRING_KAFKA_CONSUMER_KEY_DESERIALIZER:org.apache.kafka.common.serialization.StringDeserializer}
+      value-deserializer: ${SPRING_KAFKA_CONSUMER_VALUE_DESERIALIZER:org.springframework.kafka.support.serializer.JsonDeserializer}
+      properties:
+        spring.json.trusted.packages: ${SPRING_KAFKA_CONSUMER_PROPERTIES_SPRING_JSON_TRUSTED_PACKAGES:com.ecommerce.msa.order.event}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE:http://localhost:8761/eureka/}
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: ${EUREKA_INSTANCE_PREFER_IP_ADDRESS:true}
+
+feign:
+  circuitbreaker:
+    enabled: ${FEIGN_CIRCUITBREAKER_ENABLED:true}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      user-service:
+        register-health-indicator: ${RESILIENCE4J_CIRCUITBREAKER_INSTANCES_USER_SERVICE_REGISTER_HEALTH_INDICATOR:true}
+        failure-rate-threshold: ${RESILIENCE4J_CIRCUITBREAKER_INSTANCES_USER_SERVICE_FAILURE_RATE_THRESHOLD:50}
+        minimum-number-of-calls: ${RESILIENCE4J_CIRCUITBREAKER_INSTANCES_USER_SERVICE_MINIMUM_NUMBER_OF_CALLS:5}
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: ${RESILIENCE4J_CIRCUITBREAKER_INSTANCES_USER_SERVICE_WAIT_DURATION_IN_OPEN_STATE:5s}
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: ${RESILIENCE4J_CIRCUITBREAKER_INSTANCES_USER_SERVICE_SLIDING_WINDOW_SIZE:10}
+        sliding-window-type: count_based
+      product-service:
+        register-health-indicator: ${RESILIENCE4J_CIRCUITBREAKER_INSTANCES_PRODUCT_SERVICE_REGISTER_HEALTH_INDICATOR:true}
+        failure-rate-threshold: ${RESILIENCE4J_CIRCUITBREAKER_INSTANCES_PRODUCT_SERVICE_FAILURE_RATE_THRESHOLD:50}
+        minimum-number-of-calls: ${RESILIENCE4J_CIRCUITBREAKER_INSTANCES_PRODUCT_SERVICE_MINIMUM_NUMBER_OF_CALLS:5}
+        automatic-transition-from-open-to-half-open-enabled: true
+        wait-duration-in-open-state: ${RESILIENCE4J_CIRCUITBREAKER_INSTANCES_PRODUCT_SERVICE_WAIT_DURATION_IN_OPEN_STATE:5s}
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: ${RESILIENCE4J_CIRCUITBREAKER_INSTANCES_PRODUCT_SERVICE_SLIDING_WINDOW_SIZE:10}
+        sliding-window-type: count_based
+  retry:
+    instances:
+      user-service:
+        max-attempts: ${RESILIENCE4J_RETRY_INSTANCES_USER_SERVICE_MAX_ATTEMPTS:3}
+        wait-duration: ${RESILIENCE4J_RETRY_INSTANCES_USER_SERVICE_WAIT_DURATION:1s}
+      product-service:
+        max-attempts: ${RESILIENCE4J_RETRY_INSTANCES_PRODUCT_SERVICE_MAX_ATTEMPTS:3}
+        wait-duration: ${RESILIENCE4J_RETRY_INSTANCES_PRODUCT_SERVICE_WAIT_DURATION:1s}
+  timelimiter:
+    instances:
+      user-service:
+        timeout-duration: ${RESILIENCE4J_TIMELIMITER_INSTANCES_USER_SERVICE_TIMEOUT_DURATION:3s}
+      product-service:
+        timeout-duration: ${RESILIENCE4J_TIMELIMITER_INSTANCES_PRODUCT_SERVICE_TIMEOUT_DURATION:3s}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info,metrics,circuitbreakers}
+  endpoint:
+    health:
+      show-details: ${MANAGEMENT_HEALTH_SHOW_DETAILS:always}
+  health:
+    circuitbreakers:
+      enabled: ${MANAGEMENT_HEALTH_CIRCUITBREAKERS_ENABLED:true}
+
+logging:
+  level:
+    root: ${LOGGING_LEVEL_ROOT:INFO}
+    com.ecommerce.order: ${LOGGING_LEVEL_COM_ECOMMERCE_ORDER:DEBUG}
+    org.hibernate.SQL: ${LOGGING_LEVEL_SQL:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

@@ -1,0 +1,40 @@
+# Gradle
+.gradle/
+build/
+target/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+# Spring Boot
+*.log
+spring.log
+
+# Docker
+.dockerignore
+
+# Application specific
+/logs/
+/temp/
+.env
+.env*
