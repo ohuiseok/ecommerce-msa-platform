@@ -565,3 +565,37 @@ class OrderServiceIntegrationTest {
 
 **핵심 기술 키워드**: 
 `Microservices Architecture` `Spring Boot` `Eureka` `API Gateway` `Circuit Breaker` `Docker` `Kafka` `Redis` `PostgreSQL` `Elasticsearch` `JWT` `Event-Driven Architecture` `SAGA Pattern` `Distributed Systems`
+
+
+
+
+
+코드리뷰 후 최우선 변경 사항
+1. dto 분리 => 굳이 static으로 클래스 내부에 dto 클래스를 두고 있음
+2. ENTITY 수정
+	(1) manyToOne 안쓰기. 굳이라는 생각이 듦
+	(2) setter x -> gette (캡슐화 강화)
+	(3) enum의 경우는 업데이트 순서를 고정해놓기 (순서대로 변경하기 위함) (상태 전이 다이어그램 구현)
+	(4) 로직은 서비스로 옮기기
+	(5) 어노테이션 확인
+		@AllArgsConstructor(access = AccessLevel.PRIVATE)   // Builder용
+		@NoArgsConstructor(access = AccessLevel.PROTECTED)  // JPA용
+		@CreatedDate와 @LastModifiedDate로 데이터 자동 설정
+		
+3. cqrs를 통한 결합성 분리 
+	"Check-Then-Act" 패턴 => "Act-If-Valid" 패턴 (상태컬럼이 있는 것이 좋음)
+		특히 이벤트 기반 시스템에서도 비즈니스 엔티티는 상태 컬럼을 사용하고, 이벤트 처리 부분에서만 선택적으로 상태 없는 방식을 쓰는 것이 일반적
+4. jpa
+	✅ 권장사항
+		CQRS로 Command/Query 분리
+		간단한 쿼리: 메서드 네이밍 컨벤션
+		중간 복잡도: @Query 어노테이션
+		복잡한 검색: Specification 패턴
+		통계/집계: @Query + DTO Projection
+		Read Model: 이벤트 기반 비동기 동기화
+	❌ 피해야 할 것
+		모든 쿼리를 Specification으로 만들기
+		Command Repository에 복잡한 검색 쿼리 넣기
+		Native Query 남발
+		Read Model을 실시간 동기화
+	
