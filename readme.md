@@ -94,6 +94,11 @@
 - **Apache Kafka** - 분산 스트리밍 플랫폼
 - **Spring Kafka** - Kafka 통합 및 이벤트 처리
 
+### Batch & Offline Processing (학습 확장 예정)
+- **Spring Batch** - 대량 데이터 처리, 정산, 리포트, 재고 동기화 Job 설계
+- **JobRepository Metadata** - `BATCH_*` 테이블 기반 실행 이력, 재시작, 처리 건수 관찰
+- **spring-batch-test + Testcontainers** - Job/Step 단위 통합 테스트와 실제 DB 기반 검증
+
 ### Infrastructure & DevOps
 - **Docker & Docker Compose** - 컨테이너화 및 오케스트레이션
 - **Gradle 8** - 빌드 도구 및 의존성 관리
@@ -337,6 +342,29 @@ order-service:
   tables: orders, order_items, order_status
 ```
 
+### 5. 배치 처리 확장 포인트
+
+이커머스 서비스는 API 요청/응답만으로 끝나지 않고, 운영 시간이 지날수록 대량 데이터를 안정적으로 처리하는 배치 작업이 필요해집니다. 별도 `spring_batch` 학습 프로젝트에서 익힌 내용을 바탕으로 아래 유스케이스를 이 플랫폼에 단계적으로 반영할 계획입니다.
+
+| 배치 Job 후보 | 대상 서비스 | 처리 방식 | 학습 포인트 |
+|---------------|-------------|-----------|-------------|
+| 일일 주문 정산 Job | Order Service | Chunk 기반 DB Reader/Writer | `run.date` JobParameter, 멱등성, 정산 결과 중복 방지 |
+| 상품 CSV 일괄 등록 Job | Product Service | `FlatFileItemReader` + Processor + Writer | CSV 파싱, 검증 실패 데이터 skip, 처리 건수 검증 |
+| 재고 보정/동기화 Job | Product Service | Paging Reader + Chunk Writer | page size와 chunk size 조정, 대량 update 성능 측정 |
+| 휴면 회원 전환 Job | User Service | 조건 조회 + 상태 변경 | 상태 전이 정책, 재실행 시 중복 변경 방지 |
+| 이벤트 실패 보상 Job | Order/Product Service | Kafka 실패 로그 또는 outbox 재처리 | retry/restart, 실패 지점 복구, 운영 추적성 |
+
+배치 기능을 추가할 때는 단순히 `for`문으로 대량 데이터를 처리하지 않고, Spring Batch의 Job/Step 구조로 실행 이력과 실패 복구 지점을 남깁니다.
+
+```text
+dailyOrderSettlementJob
+  Step 1: 대상 주문 조회 기준 검증       -> Tasklet
+  Step 2: 주문 데이터 읽기/정산/저장      -> Chunk
+  Step 3: 정산 완료 이벤트 또는 리포트 생성 -> Tasklet
+```
+
+핵심 관찰 대상은 `BATCH_JOB_INSTANCE`, `BATCH_JOB_EXECUTION`, `BATCH_STEP_EXECUTION`입니다. 예를 들어 `run.date=2026-05-05`로 실행한 정산 Job이 실패했다면, 같은 identifying JobParameters로 재실행했을 때 새 JobInstance가 만들어지는 것이 아니라 기존 실패 JobInstance에 JobExecution만 추가되는지 확인합니다.
+
 ## 🚀 API 사용 예시
 
 ### 1. 사용자 회원가입
@@ -478,6 +506,173 @@ class OrderServiceIntegrationTest {
 }
 ```
 
+### 배치 테스트 학습 기준
+
+Spring Batch 기능을 추가할 때는 `spring_batch` 학습 프로젝트의 기준을 그대로 적용합니다.
+
+- `@SpringBatchTest`와 `JobLauncherTestUtils`로 Job 전체 실행 결과를 검증
+- `ExitStatus`, `readCount`, `writeCount`, `filterCount`, `skipCount`, `commitCount`를 함께 확인
+- Testcontainers DB에 저장된 결과 테이블과 `BATCH_*` 메타데이터를 직접 조회
+- 일반 성공 테스트는 `timestamp` 등 고유 파라미터로 새 JobInstance 생성
+- restart 테스트는 고유 파라미터를 넣지 않고 같은 identifying JobParameters로 실패 후 재실행
+- Processor 같은 순수 변환/검증 로직은 POJO 단위 테스트로 빠르게 검증
+
+배치 테스트의 목표는 "실행된다"에서 멈추지 않고, 실패/재시작/중복 방지까지 운영 관점으로 설명할 수 있게 만드는 것입니다.
+
+## 📚 세분화 학습 로드맵
+
+패키지 구조는 현재 서비스별 구조를 유지합니다. 새 패키지를 크게 늘리기보다, 각 서비스의 기존 `controller`, `service`, `repository`, `entity`, `dto`, `client`, `config`, `event` 경계 안에서 기능을 보강하며 학습합니다.
+
+### 공통 완료 기준
+
+각 단계는 단순 구현이 아니라 아래 기준까지 끝났을 때 완료로 봅니다.
+
+- README 또는 서비스별 README에 학습한 패턴과 의사결정 이유를 짧게 기록
+- 정상 케이스와 실패 케이스 테스트 작성
+- API Gateway를 통한 호출과 개별 서비스 직접 호출 차이 확인
+- Docker Compose 환경에서 서비스 등록, 통신, 헬스체크 확인
+- DB 변경이 있다면 초기화 SQL, Entity, Repository, API 응답까지 흐름 검증
+- 외부 서비스 호출이 있다면 timeout, fallback, retry 동작 확인
+- 이벤트 또는 배치가 있다면 중복 처리와 재실행 안전성 확인
+
+### 0단계 — 프로젝트 읽기와 실행 기준 잡기
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 0-1 | 전체 서비스 실행 후 Eureka Dashboard에서 등록 상태 확인 | Service Registry | ☐ |
+| 0-2 | Gateway 라우팅으로 User/Product/Order API 호출 | Gateway Routing | ☐ |
+| 0-3 | 서비스별 `application.yml`, 포트, DB 스키마 매핑 정리 | 설정 분리 | ☐ |
+| 0-4 | `docker-compose.yml`과 `docker-compose.dev.yml` 차이 정리 | 로컬/통합 환경 분리 | ☐ |
+| 0-5 | 기존 코드 리뷰 메모를 기준으로 우선 개선 목록 정리 | 리팩터링 범위 관리 | ☐ |
+
+### 1단계 — 도메인 모델과 DTO 정리
+
+기존 패키지 구조를 유지하면서 Entity, DTO, Service 책임을 명확히 분리합니다. 이 단계의 목표는 "기능 추가 전에 변경하기 쉬운 내부 구조"를 만드는 것입니다.
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 1-1 | 내부 static DTO를 별도 DTO 클래스로 분리 | 요청/응답 모델 분리 | ☐ |
+| 1-2 | Entity setter 제거, 생성/변경 메서드로 상태 변경 | 캡슐화 | ☐ |
+| 1-3 | `@NoArgsConstructor(PROTECTED)`, Builder 접근 제어 점검 | JPA Entity 규칙 | ☐ |
+| 1-4 | `@CreatedDate`, `@LastModifiedDate` 기반 감사 필드 정리 | Auditing | ☐ |
+| 1-5 | Order 상태 전이 규칙을 enum과 서비스 로직으로 표현 | 상태 전이 | ☐ |
+| 1-6 | Entity 안의 비즈니스 로직과 Service 로직 경계 정리 | 책임 분리 | ☐ |
+
+### 2단계 — User Service 학습
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 2-1 | 회원가입 요청/응답 DTO 검증 강화 | Bean Validation | ☐ |
+| 2-2 | 비밀번호 암호화와 로그인 흐름 점검 | Spring Security | ☐ |
+| 2-3 | JWT 발급, 검증, 만료 정책 문서화 | Stateless 인증 | ☐ |
+| 2-4 | 사용자 조회 API의 예외 응답 형식 통일 | GlobalExceptionHandler | ☐ |
+| 2-5 | 휴면/탈퇴/활성 상태 컬럼 설계 | 사용자 상태 관리 | ☐ |
+| 2-6 | Command와 Query 메서드 분리 | CQRS 기초 | ☐ |
+
+### 3단계 — Product Service 학습
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 3-1 | 상품 등록/수정 DTO와 Entity 변경 흐름 정리 | DTO Mapping | ☐ |
+| 3-2 | 카테고리와 상품 관계를 현재 구조 안에서 명확히 표현 | Aggregate 경계 | ☐ |
+| 3-3 | 상품 목록 페이징/정렬 API 검증 | Pageable | ☐ |
+| 3-4 | 상품 검색 쿼리 전략 정리 | Method Query, `@Query`, Specification | ☐ |
+| 3-5 | 재고 차감 API를 멱등성과 동시성 관점에서 점검 | 재고 정합성 | ☐ |
+| 3-6 | Redis 캐시 적용 후보와 무효화 기준 정리 | Cache Aside | ☐ |
+
+### 4단계 — Order Service와 서비스 간 통신
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 4-1 | 주문 생성 시 User/Product 조회 흐름 정리 | OpenFeign | ☐ |
+| 4-2 | Feign Client fallback 응답 정책 점검 | 장애 격리 | ☐ |
+| 4-3 | 주문 상태를 `CREATED`, `CONFIRMED`, `CANCELED` 등으로 세분화 | 상태 머신 기초 | ☐ |
+| 4-4 | Check-Then-Act 흐름을 Act-If-Valid 관점으로 개선 계획 수립 | 동시성 사고 | ☐ |
+| 4-5 | 주문 취소와 재고 복구 흐름 설계 | 보상 트랜잭션 | ☐ |
+| 4-6 | 주문 조회용 DTO Projection 검토 | Query 최적화 | ☐ |
+
+### 5단계 — API Gateway와 보안 경계
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 5-1 | Gateway 라우팅 규칙을 서비스별로 정리 | Route Predicate | ☐ |
+| 5-2 | JWT 필터의 인증 제외 경로와 보호 경로 분리 | Security Boundary | ☐ |
+| 5-3 | CORS 정책과 로컬 개발 허용 범위 정리 | CORS | ☐ |
+| 5-4 | Gateway에서 공통 에러 응답을 어떻게 다룰지 정리 | Edge Error Handling | ☐ |
+| 5-5 | Rate Limiting 적용 후보 API 선정 | 요청 제한 | ☐ |
+
+### 6단계 — 장애 격리와 복구 패턴
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 6-1 | User Service 장애 시 Order Service fallback 검증 | Circuit Breaker | ☐ |
+| 6-2 | Product Service timeout 상황 재현 | TimeLimiter | ☐ |
+| 6-3 | Retry가 적합한 실패와 부적합한 실패 구분 | Retry 정책 | ☐ |
+| 6-4 | fallback 응답이 비즈니스적으로 안전한지 검토 | Fail Fast / Degrade | ☐ |
+| 6-5 | 장애 상황 로그와 Actuator Health 확인 | 운영 관찰성 | ☐ |
+
+### 7단계 — 이벤트 드리븐 아키텍처
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 7-1 | 주문 생성 후 `order.created` 이벤트 발행 | Event Publishing | ☐ |
+| 7-2 | 이벤트 DTO와 API DTO 분리 | 이벤트 계약 | ☐ |
+| 7-3 | Consumer 실패 시 재처리 전략 정리 | Retry / DLQ | ☐ |
+| 7-4 | 이벤트 중복 수신에 대비한 멱등 처리 기준 작성 | Idempotency | ☐ |
+| 7-5 | Outbox 패턴 적용 필요성 검토 | Transactional Outbox | ☐ |
+
+### 8단계 — CQRS와 조회 최적화
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 8-1 | Command Repository와 Query Repository 역할 분리 계획 | CQRS | ☐ |
+| 8-2 | 간단 조회는 메서드 네이밍, 중간 복잡도는 `@Query`로 정리 | Query 전략 | ☐ |
+| 8-3 | 복잡한 검색 조건만 Specification 후보로 분류 | Specification 남용 방지 | ☐ |
+| 8-4 | 통계/집계 API는 DTO Projection으로 설계 | Projection | ☐ |
+| 8-5 | 이벤트 기반 Read Model 후보 선정 | 비동기 동기화 | ☐ |
+
+### 9단계 — Spring Batch 확장
+
+패키지 구조는 유지하되, 배치가 필요한 서비스 안에서 `job`, `batch`, `config` 등 최소한의 하위 패키지만 추가하는 방향으로 학습합니다.
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 9-1 | 일일 주문 정산 Job 설계 | Job / Step | ☐ |
+| 9-2 | `run.date` JobParameter로 정산 기준일 전달 | identifying parameter | ☐ |
+| 9-3 | 주문 데이터 Chunk 처리와 정산 결과 저장 | Reader / Processor / Writer | ☐ |
+| 9-4 | 상품 CSV 일괄 등록 Job 설계 | FlatFileItemReader | ☐ |
+| 9-5 | 잘못된 CSV row skip과 skip count 검증 | Skip 정책 | ☐ |
+| 9-6 | 실패 후 같은 JobParameters로 restart 검증 | Restart | ☐ |
+| 9-7 | `BATCH_*` 메타데이터 직접 조회 | JobRepository | ☐ |
+
+### 10단계 — 테스트와 운영 자동화
+
+| 챕터 | 학습/구현 내용 | 핵심 개념 | 완료 |
+|------|----------------|-----------|:----:|
+| 10-1 | 서비스별 단위 테스트 기준 정리 | Unit Test | ☐ |
+| 10-2 | Testcontainers 기반 통합 테스트 작성 | Integration Test | ☐ |
+| 10-3 | Gateway를 통과하는 API 시나리오 테스트 | End-to-End 관점 | ☐ |
+| 10-4 | Docker Compose 헬스체크 스크립트 검증 | Health Check | ☐ |
+| 10-5 | Actuator 메트릭과 로그 관찰 포인트 정리 | Monitoring | ☐ |
+| 10-6 | 부하 테스트 대상 API와 측정 지표 선정 | Throughput / Latency | ☐ |
+
+### 전체 진행 현황
+
+| 단계 | 챕터 수 | 완료 수 | 진행률 |
+|------|:-------:|:-------:|:------:|
+| 0 (프로젝트 읽기) | 5 | 0 | 0% |
+| 1 (도메인/DTO 정리) | 6 | 0 | 0% |
+| 2 (User Service) | 6 | 0 | 0% |
+| 3 (Product Service) | 6 | 0 | 0% |
+| 4 (Order Service) | 6 | 0 | 0% |
+| 5 (Gateway/보안) | 5 | 0 | 0% |
+| 6 (장애 격리) | 5 | 0 | 0% |
+| 7 (이벤트) | 5 | 0 | 0% |
+| 8 (CQRS/조회) | 5 | 0 | 0% |
+| 9 (Batch) | 7 | 0 | 0% |
+| 10 (테스트/운영) | 6 | 0 | 0% |
+| **합계** | **62** | **0** | **0%** |
+
 ## 🚧 개발 로드맵
 
 ### Phase 1: 핵심 MSA 구조 (진행중) ✅
@@ -508,6 +703,7 @@ class OrderServiceIntegrationTest {
 - [ ] **Notification Service** - 알림 서비스
 - [ ] **SAGA 패턴** - 분산 트랜잭션 관리
 - [ ] **CQRS 패턴** - 명령과 조회 분리
+- [ ] **Batch Processing** - 주문 정산, 상품 일괄 등록, 재고 보정 등 대량 처리 Job
 
 ### Phase 3: 운영 개선 (6개월 예정)
 - [ ] **API Rate Limiting** - 서비스별 호출 제한
@@ -540,12 +736,14 @@ class OrderServiceIntegrationTest {
 - **모니터링**: Actuator를 통한 헬스체크 및 메트릭 수집
 - **로그 관리**: 구조화된 로깅 및 분산 시스템 추적
 - **자동화**: 빌드/배포 스크립트를 통한 개발 효율성
+- **배치 운영 이해**: Job/Step 실행 이력, 재시작, skip/retry, 처리 건수 기반 운영 추적
 
 ### 확장성 & 성능 설계
 - **수평 확장**: 각 서비스별 독립적인 스케일링
 - **데이터베이스 분산**: 서비스별 독립적인 데이터 저장소
 - **캐싱 전략**: 다층 캐싱을 통한 응답속도 향상
 - **비동기 처리**: 이벤트 기반 비동기 통신으로 처리량 증대
+- **대량 처리 설계**: Chunk size, page size, 트랜잭션 범위, 멱등성을 고려한 배치 처리
 
 ## 📞 프로젝트 관련 문의
 
@@ -564,7 +762,7 @@ class OrderServiceIntegrationTest {
 서비스 디스커버리부터 분산 트랜잭션 처리, 장애 복구, 성능 최적화까지 MSA의 핵심 패턴들을 실제로 구현하여 **기업 환경에서 요구하는 기술 역량**을 입증합니다.
 
 **핵심 기술 키워드**: 
-`Microservices Architecture` `Spring Boot` `Eureka` `API Gateway` `Circuit Breaker` `Docker` `Kafka` `Redis` `PostgreSQL` `Elasticsearch` `JWT` `Event-Driven Architecture` `SAGA Pattern` `Distributed Systems`
+`Microservices Architecture` `Spring Boot` `Spring Batch` `Eureka` `API Gateway` `Circuit Breaker` `Docker` `Kafka` `Redis` `PostgreSQL` `Elasticsearch` `JWT` `Event-Driven Architecture` `SAGA Pattern` `Distributed Systems` `Batch Processing`
 
 
 
