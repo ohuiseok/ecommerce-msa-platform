@@ -38,3 +38,6 @@ spring.log
 /temp/
 .env
 .env*
+
+# Local planning docs
+docs/
