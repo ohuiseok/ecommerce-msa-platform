@@ -31,11 +31,19 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(authz -> authz
-                .requestMatchers("/api/users/register", "/api/users/login", "/api/**/health", "/actuator/**").permitAll()
+                .requestMatchers(
+                        "/api/users/register",
+                        "/api/users/login",
+                        "/api/users/health",
+                        "/api/products/health",
+                        "/api/orders/health",
+                        "/actuator/**"
+                ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/products/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/orders/status/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/orders/*/status").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )

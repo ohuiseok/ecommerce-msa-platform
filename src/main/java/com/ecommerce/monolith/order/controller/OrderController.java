@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,14 +30,20 @@ public class OrderController {
     }
 
     @GetMapping("/{orderId}")
-    public ResponseEntity<OrderResponse.OrderInfo> getOrder(@PathVariable Long orderId) {
+    public ResponseEntity<OrderResponse.OrderInfo> getOrder(
+            @PathVariable Long orderId,
+            Authentication authentication) {
         OrderResponse.OrderInfo orderInfo = orderService.getOrder(orderId);
+        validateSelfOrAdmin(orderInfo.getUserId(), authentication);
         return ResponseEntity.ok(orderInfo);
     }
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<Page<OrderResponse.OrderInfo>> getOrdersByUserId(
-            @PathVariable Long userId, Pageable pageable) {
+            @PathVariable Long userId,
+            Pageable pageable,
+            Authentication authentication) {
+        validateSelfOrAdmin(userId, authentication);
         Page<OrderResponse.OrderInfo> orders = orderService.getOrdersByUserId(userId, pageable);
         return ResponseEntity.ok(orders);
     }
@@ -64,13 +71,27 @@ public class OrderController {
     }
 
     @DeleteMapping("/{orderId}")
-    public ResponseEntity<Void> cancelOrder(@PathVariable Long orderId) {
+    public ResponseEntity<Void> cancelOrder(@PathVariable Long orderId, Authentication authentication) {
+        OrderResponse.OrderInfo orderInfo = orderService.getOrder(orderId);
+        validateSelfOrAdmin(orderInfo.getUserId(), authentication);
         orderService.cancelOrder(orderId);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/health")
     public ResponseEntity<String> health() {
-        return ResponseEntity.ok("Order Service is running");
+        return ResponseEntity.ok("Order API is running");
+    }
+
+    private void validateSelfOrAdmin(Long resourceUserId, Authentication authentication) {
+        Long authenticatedUserId = (Long) authentication.getPrincipal();
+        if (!resourceUserId.equals(authenticatedUserId) && !isAdmin(authentication)) {
+            throw new AccessDeniedException("접근 권한이 없습니다");
+        }
+    }
+
+    private boolean isAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
     }
 }

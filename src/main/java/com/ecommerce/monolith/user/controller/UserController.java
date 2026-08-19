@@ -6,6 +6,8 @@ import com.ecommerce.monolith.user.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -28,28 +30,50 @@ public class UserController {
     }
 
     @GetMapping("/{userId}")
-    public ResponseEntity<UserResponse.UserInfo> getUser(@PathVariable Long userId) {
+    public ResponseEntity<UserResponse.UserInfo> getUser(@PathVariable Long userId, Authentication authentication) {
+        validateSelfOrAdmin(userId, authentication);
         UserResponse.UserInfo userInfo = userService.getUserById(userId);
         return ResponseEntity.ok(userInfo);
     }
 
     @GetMapping("/email/{email}")
-    public ResponseEntity<UserResponse.UserInfo> getUserByEmail(@PathVariable String email) {
-        return userService.getUserByEmail(email)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<UserResponse.UserInfo> getUserByEmail(
+            @PathVariable String email,
+            Authentication authentication) {
+        UserResponse.UserInfo userInfo = userService.getUserByEmail(email)
+                .orElse(null);
+        if (userInfo == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        validateSelfOrAdmin(userInfo.getUserId(), authentication);
+        return ResponseEntity.ok(userInfo);
     }
 
     @PutMapping("/{userId}")
     public ResponseEntity<UserResponse.UserInfo> updateUser(
             @PathVariable Long userId,
-            @Valid @RequestBody UserRequest.Update request) {
+            @Valid @RequestBody UserRequest.Update request,
+            Authentication authentication) {
+        validateSelfOrAdmin(userId, authentication);
         UserResponse.UserInfo userInfo = userService.updateUser(userId, request);
         return ResponseEntity.ok(userInfo);
     }
 
     @GetMapping("/health")
     public ResponseEntity<String> health() {
-        return ResponseEntity.ok("User Service is running");
+        return ResponseEntity.ok("User API is running");
+    }
+
+    private void validateSelfOrAdmin(Long resourceUserId, Authentication authentication) {
+        Long authenticatedUserId = (Long) authentication.getPrincipal();
+        if (!resourceUserId.equals(authenticatedUserId) && !isAdmin(authentication)) {
+            throw new AccessDeniedException("접근 권한이 없습니다");
+        }
+    }
+
+    private boolean isAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
     }
 }

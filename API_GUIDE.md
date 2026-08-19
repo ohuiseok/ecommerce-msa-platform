@@ -5,7 +5,7 @@
 ## 서비스 시작
 
 ```bash
-docker-compose up --build
+ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=admin123 docker-compose up --build
 ```
 
 개발 중 DB만 띄울 때:
@@ -22,6 +22,8 @@ curl http://localhost:8080/actuator/health
 ```
 
 ## 인증
+
+관리자 권한이 필요한 API는 `ADMIN_EMAIL`과 `ADMIN_PASSWORD`로 부트스트랩한 관리자 계정으로 로그인한 뒤 받은 토큰을 사용합니다.
 
 회원가입:
 
@@ -76,12 +78,12 @@ curl -X PUT http://localhost:8080/api/users/1 \
 
 ## Product API
 
-상품 생성:
+상품 생성은 관리자 토큰이 필요합니다.
 
 ```bash
 curl -X POST http://localhost:8080/api/products \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
   -d '{
     "name": "스마트폰",
     "description": "최신 스마트폰입니다",
@@ -110,12 +112,12 @@ curl "http://localhost:8080/api/products/search?keyword=스마트폰"
 curl http://localhost:8080/api/products/1/stock
 ```
 
-재고 변경:
+재고 변경은 관리자 토큰이 필요합니다.
 
 ```bash
 curl -X PUT http://localhost:8080/api/products/1/stock \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
   -d '{
     "quantity": 5,
     "operation": "DECREASE"
@@ -161,12 +163,12 @@ curl "http://localhost:8080/api/orders/user/1?page=0&size=10" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
-주문 상태 변경:
+주문 상태 변경은 관리자 토큰이 필요합니다.
 
 ```bash
 curl -X PUT http://localhost:8080/api/orders/1/status \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
   -d '{
     "status": "CONFIRMED"
   }'

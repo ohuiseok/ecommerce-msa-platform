@@ -125,6 +125,6 @@ public class ProductController {
 
     @GetMapping("/health")
     public ResponseEntity<String> health() {
-        return ResponseEntity.ok("Product Service is running");
+        return ResponseEntity.ok("Product API is running");
     }
 }
