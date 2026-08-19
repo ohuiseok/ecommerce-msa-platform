@@ -21,6 +21,8 @@ public class ProductResponse {
         private String brand;
         private String imageUrl;
         private Product.ProductStatus status;
+        private BigDecimal averageRating;
+        private Integer reviewCount;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
 
@@ -35,6 +37,8 @@ public class ProductResponse {
                     .brand(product.getBrand())
                     .imageUrl(product.getImageUrl())
                     .status(product.getStatus())
+                    .averageRating(product.getAverageRating())
+                    .reviewCount(product.getReviewCount())
                     .createdAt(product.getCreatedAt())
                     .updatedAt(product.getUpdatedAt())
                     .build();

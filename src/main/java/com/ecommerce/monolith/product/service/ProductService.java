@@ -174,6 +174,14 @@ public class ProductService {
                 .collect(Collectors.toList());
     }
 
+    public void updateRatingStats(Long productId, BigDecimal averageRating, int reviewCount) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
+
+        product.updateRatingStats(averageRating, reviewCount);
+        productRepository.save(product);
+    }
+
     public void deleteProduct(Long productId) {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));

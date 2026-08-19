@@ -47,6 +47,14 @@ public class Product {
     @Builder.Default
     private ProductStatus status = ProductStatus.ACTIVE;
 
+    @Column(precision = 3, scale = 2)
+    @Builder.Default
+    private BigDecimal averageRating = BigDecimal.ZERO;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer reviewCount = 0;
+
     @CreatedDate
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -74,5 +82,10 @@ public class Product {
         if (this.status == ProductStatus.OUT_OF_STOCK && this.stockQuantity > 0) {
             this.status = ProductStatus.ACTIVE;
         }
+    }
+
+    public void updateRatingStats(BigDecimal averageRating, int reviewCount) {
+        this.averageRating = averageRating;
+        this.reviewCount = reviewCount;
     }
 }

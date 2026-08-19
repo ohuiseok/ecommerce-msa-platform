@@ -14,7 +14,8 @@ src/main/java/com/ecommerce/monolith/
 ├── cart/        # 장바구니 조회 및 상품 담기/수정/삭제
 ├── order/       # 주문 생성, 체크아웃, 조회, 상태 변경, 취소
 ├── payment/     # 모의 PG 연동 결제 요청/조회/취소
-└── coupon/      # 쿠폰 발급, 보유 쿠폰 조회, 체크아웃 시 할인 적용
+├── coupon/      # 쿠폰 발급, 보유 쿠폰 조회, 체크아웃 시 할인 적용
+└── review/      # 구매 검증 기반 리뷰 작성/조회/수정/삭제, 상품 평점 집계
 ```
 
 ## 기술 스택
@@ -148,6 +149,17 @@ Gradle wrapper가 포함되어 있어 로컬 Gradle 설치 없이 실행할 수 
 
 쿠폰 조회는 공개 API이고, 발급/보유 쿠폰 조회는 JWT 인증이 필요합니다. 쿠폰은 정액(`FIXED_AMOUNT`) 또는 정률(`PERCENTAGE`, `maxDiscountAmount`로 한도 설정 가능) 할인을 지원하며 `minOrderAmount`, `validFrom`~`validUntil`, `issueLimit`(전체 발급 수량)을 검증합니다. 발급 수량 제한은 재고 차감과 동일하게 조건부 UPDATE 쿼리로 동시 발급 시 초과 발급을 방지합니다. 한 사용자는 동일 쿠폰을 한 번만 발급받을 수 있고, 쿠폰 1개는 주문 1건에만 사용할 수 있습니다.
 
+### Review
+
+- `POST /api/reviews` (리뷰 작성)
+- `GET /api/reviews/{reviewId}`
+- `GET /api/reviews/product/{productId}` (상품별 리뷰 목록)
+- `GET /api/reviews/my` (내가 쓴 리뷰 목록)
+- `PUT /api/reviews/{reviewId}`
+- `DELETE /api/reviews/{reviewId}`
+
+리뷰 조회는 공개 API이고, 작성/내 리뷰 조회는 JWT 인증이 필요합니다. 리뷰 작성 시 `orderId`로 넘긴 주문이 본인 소유이고 취소되지 않았으며 해당 상품을 포함하는지 검증하는 방식으로 실제 구매자만 리뷰를 남길 수 있게 합니다. 수정/삭제는 작성자 본인 또는 관리자만 가능합니다. 상품별 평균 평점(`averageRating`)과 리뷰 수(`reviewCount`)는 리뷰 작성/수정/삭제 시마다 재계산되어 `Product` 응답에 함께 노출됩니다. 한 사용자는 같은 상품에 리뷰를 하나만 남길 수 있습니다.
+
 ### 오류 응답
 
 모든 도메인 예외는 `ErrorCode`(상태 코드 + 메시지)를 통해 일관된 형식으로 반환됩니다. 예: 리소스 없음 `404`, 중복 이메일/재고 부족/이미 처리된 결제 `409`, 잘못된 요청 `400`.
@@ -196,11 +208,12 @@ curl http://localhost:8080/api/orders/1 \
 ./gradlew test
 ```
 
-- 서비스 단위 테스트(Mockito): User/Product/Order/Cart/Payment/Coupon
+- 서비스 단위 테스트(Mockito): User/Product/Order/Cart/Payment/Coupon/Review
 - 통합 테스트(Testcontainers PostgreSQL, Docker 필요):
   - `ProductConcurrencyIntegrationTest`: 재고보다 많은 동시 요청에도 오버셀이 발생하지 않는지 검증 (조건부 UPDATE 쿼리 동시성 테스트)
   - `OrderCheckoutIntegrationTest`: 회원가입 → 로그인 → 관리자 상품 등록 → 장바구니 담기 → 체크아웃 → 결제까지 HTTP 계층 전체 흐름 검증 (결제 성공/실패, 재결제 방지, 빈 장바구니 체크아웃 방지 포함)
   - `CouponCheckoutIntegrationTest`: 쿠폰 발급 → 체크아웃 할인 적용 → 주문 취소 시 쿠폰 복원, 최소 주문 금액 미충족 시 체크아웃 거부 검증
+  - `ReviewIntegrationTest`: 체크아웃 → 리뷰 작성 → 상품 평점 반영 → 중복/미구매 리뷰 거부 → 리뷰 삭제 시 평점 재계산 검증
 
 ## 빌드
 

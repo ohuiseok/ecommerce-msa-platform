@@ -304,6 +304,46 @@ curl -X DELETE http://localhost:8080/api/payments/1 \
   -H "Authorization: Bearer ADMIN_JWT_TOKEN"
 ```
 
+## Review API
+
+리뷰 작성 (해당 주문이 본인 소유이고, 취소되지 않았으며, 리뷰 대상 상품을 포함해야 합니다):
+
+```bash
+curl -X POST http://localhost:8080/api/reviews \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "productId": 1,
+    "orderId": 1,
+    "rating": 5,
+    "content": "배송도 빠르고 품질도 좋아요"
+  }'
+```
+
+상품별 리뷰 목록 (공개 API):
+
+```bash
+curl "http://localhost:8080/api/reviews/product/1?page=0&size=10"
+```
+
+리뷰를 작성하면 해당 상품의 `averageRating`/`reviewCount`가 자동으로 재계산되어 상품 조회 응답(`GET /api/products/1`)에 반영됩니다.
+
+리뷰 수정 (작성자 본인 또는 관리자만 가능):
+
+```bash
+curl -X PUT http://localhost:8080/api/reviews/1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{"rating": 4, "content": "다시 써보니 이 정도예요"}'
+```
+
+내가 쓴 리뷰 목록:
+
+```bash
+curl http://localhost:8080/api/reviews/my \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
 ## API 문서 (Swagger UI)
 
 ```bash

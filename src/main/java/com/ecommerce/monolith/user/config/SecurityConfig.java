@@ -40,6 +40,7 @@ public class SecurityConfig {
                         "/api/cart/health",
                         "/api/payments/health",
                         "/api/coupons/health",
+                        "/api/reviews/health",
                         "/actuator/**",
                         "/swagger-ui/**",
                         "/swagger-ui.html",
@@ -56,6 +57,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/coupons/my").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/coupons").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/coupons/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/reviews/my").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/reviews/**").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

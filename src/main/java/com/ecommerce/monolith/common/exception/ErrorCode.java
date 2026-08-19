@@ -36,7 +36,12 @@ public enum ErrorCode {
     COUPON_ALREADY_ISSUED(HttpStatus.CONFLICT, "이미 발급받은 쿠폰입니다"),
     USER_COUPON_NOT_FOUND(HttpStatus.NOT_FOUND, "보유한 쿠폰을 찾을 수 없습니다"),
     COUPON_ALREADY_USED(HttpStatus.CONFLICT, "이미 사용되었거나 사용할 수 없는 쿠폰입니다"),
-    COUPON_MIN_ORDER_AMOUNT_NOT_MET(HttpStatus.CONFLICT, "쿠폰 최소 주문 금액을 충족하지 않습니다");
+    COUPON_MIN_ORDER_AMOUNT_NOT_MET(HttpStatus.CONFLICT, "쿠폰 최소 주문 금액을 충족하지 않습니다"),
+
+    // Review
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "리뷰를 찾을 수 없습니다"),
+    REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 리뷰를 작성한 상품입니다"),
+    PRODUCT_NOT_PURCHASED(HttpStatus.CONFLICT, "구매 확정된 주문에 포함된 상품만 리뷰를 작성할 수 있습니다");
 
     private final HttpStatus status;
     private final String message;
