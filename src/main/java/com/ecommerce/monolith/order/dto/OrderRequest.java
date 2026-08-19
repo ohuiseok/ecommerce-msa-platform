@@ -56,4 +56,11 @@ public class OrderRequest {
         @NotNull(message = "주문 상태는 필수입니다")
         private String status;  // CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED
     }
+
+    @Data
+    public static class Checkout {
+        @NotNull(message = "배송 주소는 필수입니다")
+        @Valid
+        private ShippingAddressRequest shippingAddress;
+    }
 }

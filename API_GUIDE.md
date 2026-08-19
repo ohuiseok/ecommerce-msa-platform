@@ -124,9 +124,39 @@ curl -X PUT http://localhost:8080/api/products/1/stock \
   }'
 ```
 
+## Cart API
+
+장바구니 담기:
+
+```bash
+curl -X POST http://localhost:8080/api/cart/items \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "productId": 1,
+    "quantity": 2
+  }'
+```
+
+장바구니 조회:
+
+```bash
+curl http://localhost:8080/api/cart \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+장바구니 항목 수량 변경:
+
+```bash
+curl -X PUT http://localhost:8080/api/cart/items/1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{"quantity": 3}'
+```
+
 ## Order API
 
-주문 생성:
+주문 생성 (상품을 직접 지정):
 
 ```bash
 curl -X POST http://localhost:8080/api/orders \
@@ -139,6 +169,23 @@ curl -X POST http://localhost:8080/api/orders \
         "quantity": 2
       }
     ],
+    "shippingAddress": {
+      "zipCode": "12345",
+      "address": "서울시 강남구 테헤란로 123",
+      "detailAddress": "456호",
+      "recipientName": "홍길동",
+      "recipientPhone": "010-1234-5678"
+    }
+  }'
+```
+
+장바구니 기반 체크아웃 (담긴 상품으로 주문을 만들고 장바구니를 비웁니다):
+
+```bash
+curl -X POST http://localhost:8080/api/orders/checkout \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
     "shippingAddress": {
       "zipCode": "12345",
       "address": "서울시 강남구 테헤란로 123",
@@ -180,3 +227,42 @@ curl -X PUT http://localhost:8080/api/orders/1/status \
 curl -X DELETE http://localhost:8080/api/orders/1 \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
+
+## Payment API
+
+결제 요청 (모의 PG. `CARD` 결제는 카드번호 마지막 자리가 짝수면 승인, 홀수면 거절됩니다):
+
+```bash
+curl -X POST http://localhost:8080/api/payments \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "orderId": 1,
+    "method": "CARD",
+    "cardNumber": "4111111111111112"
+  }'
+```
+
+결제가 승인되면 해당 주문 상태가 자동으로 `CONFIRMED`로 바뀝니다. 응답의 `status` 필드가 `COMPLETED`/`FAILED`인지로 결과를 확인합니다.
+
+주문별 결제 조회:
+
+```bash
+curl http://localhost:8080/api/payments/order/1 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+결제 취소/환불 (관리자 전용):
+
+```bash
+curl -X DELETE http://localhost:8080/api/payments/1 \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+## API 문서 (Swagger UI)
+
+```bash
+open http://localhost:8080/swagger-ui.html
+```
+
+우측 상단 `Authorize` 버튼에 `Bearer YOUR_JWT_TOKEN`을 입력하면 인증이 필요한 API도 UI에서 바로 호출할 수 있습니다.

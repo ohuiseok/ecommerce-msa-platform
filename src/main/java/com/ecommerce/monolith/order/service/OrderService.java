@@ -1,5 +1,9 @@
 package com.ecommerce.monolith.order.service;
 
+import com.ecommerce.monolith.cart.dto.CartResponse;
+import com.ecommerce.monolith.cart.service.CartService;
+import com.ecommerce.monolith.common.exception.BusinessException;
+import com.ecommerce.monolith.common.exception.ErrorCode;
 import com.ecommerce.monolith.order.dto.OrderRequest;
 import com.ecommerce.monolith.order.dto.OrderResponse;
 import com.ecommerce.monolith.order.entity.Order;
@@ -29,6 +33,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final UserService userService;
     private final ProductService productService;
+    private final CartService cartService;
 
     public OrderResponse.OrderInfo createOrder(Long userId, OrderRequest.Create request) {
         // 1. 사용자 정보 확인
@@ -43,22 +48,7 @@ public class OrderService {
 
         // 3. 주문 항목 처리
         for (OrderRequest.OrderItemRequest itemRequest : request.getOrderItems()) {
-            ProductResponse.ProductInfo productInfo = productService.getProduct(itemRequest.getProductId());
-
-            // 재고 확인 및 차감
-            decreaseStock(
-                    itemRequest.getProductId(), 
-                    itemRequest.getQuantity()
-            );
-
-            OrderItem orderItem = OrderItem.builder()
-                    .productId(itemRequest.getProductId())
-                    .productName(productInfo.getName())
-                    .price(productInfo.getPrice())
-                    .quantity(itemRequest.getQuantity())
-                    .build();
-
-            order.addOrderItem(orderItem);
+            addOrderItem(order, itemRequest.getProductId(), itemRequest.getQuantity());
         }
 
         // 4. 총 금액 계산
@@ -67,16 +57,60 @@ public class OrderService {
         // 5. 주문 저장
         Order savedOrder = orderRepository.save(order);
 
-        log.info("Order created successfully: orderId={}, userId={}, totalAmount={}", 
+        log.info("Order created successfully: orderId={}, userId={}, totalAmount={}",
                 savedOrder.getOrderId(), savedOrder.getUserId(), savedOrder.getTotalAmount());
 
         return OrderResponse.OrderInfo.from(savedOrder);
     }
 
+    public OrderResponse.OrderInfo createOrderFromCart(Long userId, OrderRequest.Checkout request) {
+        UserResponse.UserInfo userInfo = userService.getUserById(userId);
+        CartResponse.CartInfo cart = cartService.getCart(userId);
+
+        if (cart.getItems().isEmpty()) {
+            throw new BusinessException(ErrorCode.CART_EMPTY);
+        }
+
+        Order order = Order.builder()
+                .userId(userInfo.getUserId())
+                .totalAmount(BigDecimal.ZERO)
+                .shippingAddress(createShippingAddress(request.getShippingAddress()))
+                .build();
+
+        for (CartResponse.CartItemInfo item : cart.getItems()) {
+            addOrderItem(order, item.getProductId(), item.getQuantity());
+        }
+
+        order.calculateTotalAmount();
+        Order savedOrder = orderRepository.save(order);
+        cartService.clearCart(userId);
+
+        log.info("Order created from cart: orderId={}, userId={}, totalAmount={}",
+                savedOrder.getOrderId(), savedOrder.getUserId(), savedOrder.getTotalAmount());
+
+        return OrderResponse.OrderInfo.from(savedOrder);
+    }
+
+    private void addOrderItem(Order order, Long productId, Integer quantity) {
+        ProductResponse.ProductInfo productInfo = productService.getProduct(productId);
+
+        // 재고 확인 및 차감
+        decreaseStock(productId, quantity);
+
+        OrderItem orderItem = OrderItem.builder()
+                .productId(productId)
+                .productName(productInfo.getName())
+                .price(productInfo.getPrice())
+                .quantity(quantity)
+                .build();
+
+        order.addOrderItem(orderItem);
+    }
+
     private ProductResponse.StockInfo decreaseStock(Long productId, Integer quantity) {
         ProductRequest.StockUpdate request = new ProductRequest.StockUpdate();
         request.setQuantity(quantity);
-        request.setOperation("DECREASE");
+        request.setOperation(ProductRequest.Operation.DECREASE);
 
         return productService.updateStock(productId, request);
     }
@@ -94,7 +128,7 @@ public class OrderService {
     @Transactional(readOnly = true)
     public OrderResponse.OrderInfo getOrder(Long orderId) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
         return OrderResponse.OrderInfo.from(order);
     }
@@ -113,13 +147,13 @@ public class OrderService {
 
     public OrderResponse.OrderInfo updateOrderStatus(Long orderId, OrderRequest.StatusUpdate request) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
         Order.OrderStatus newStatus;
         try {
             newStatus = Order.OrderStatus.valueOf(request.getStatus());
         } catch (IllegalArgumentException e) {
-            throw new RuntimeException("유효하지 않은 주문 상태입니다: " + request.getStatus());
+            throw new BusinessException(ErrorCode.INVALID_ORDER_STATUS, "유효하지 않은 주문 상태입니다: " + request.getStatus());
         }
 
         order.updateStatus(newStatus);
@@ -132,11 +166,11 @@ public class OrderService {
 
     public void cancelOrder(Long orderId) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new RuntimeException("주문을 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
-        if (order.getStatus() == Order.OrderStatus.SHIPPED || 
+        if (order.getStatus() == Order.OrderStatus.SHIPPED ||
             order.getStatus() == Order.OrderStatus.DELIVERED) {
-            throw new RuntimeException("배송 중이거나 완료된 주문은 취소할 수 없습니다");
+            throw new BusinessException(ErrorCode.ORDER_CANCELLATION_NOT_ALLOWED);
         }
 
         order.updateStatus(Order.OrderStatus.CANCELLED);
@@ -146,11 +180,22 @@ public class OrderService {
         for (OrderItem orderItem : order.getOrderItems()) {
             ProductRequest.StockUpdate request = new ProductRequest.StockUpdate();
             request.setQuantity(orderItem.getQuantity());
-            request.setOperation("INCREASE");
+            request.setOperation(ProductRequest.Operation.INCREASE);
 
             productService.updateStock(orderItem.getProductId(), request);
         }
 
         log.info("Order cancelled successfully: orderId={}", orderId);
+    }
+
+    @Transactional
+    public void markOrderConfirmed(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        order.updateStatus(Order.OrderStatus.CONFIRMED);
+        orderRepository.save(order);
+
+        log.info("Order confirmed after payment: orderId={}", orderId);
     }
 }

@@ -3,6 +3,7 @@ package com.ecommerce.monolith.product.controller;
 import com.ecommerce.monolith.product.dto.ProductRequest;
 import com.ecommerce.monolith.product.dto.ProductResponse;
 import com.ecommerce.monolith.product.service.ProductService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -16,6 +17,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/products")
 @RequiredArgsConstructor
+@Tag(name = "Product", description = "상품 조회, 검색, 재고 관리 API")
 public class ProductController {
 
     private final ProductService productService;

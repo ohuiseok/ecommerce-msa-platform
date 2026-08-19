@@ -1,5 +1,7 @@
 package com.ecommerce.monolith.product.service;
 
+import com.ecommerce.monolith.common.exception.BusinessException;
+import com.ecommerce.monolith.common.exception.ErrorCode;
 import com.ecommerce.monolith.product.dto.ProductRequest;
 import com.ecommerce.monolith.product.dto.ProductResponse;
 import com.ecommerce.monolith.product.entity.Product;
@@ -36,7 +38,7 @@ class ProductServiceTest {
                 .status(Product.ProductStatus.ACTIVE)
                 .build();
         ProductRequest.StockUpdate request = new ProductRequest.StockUpdate();
-        request.setOperation("DECREASE");
+        request.setOperation(ProductRequest.Operation.DECREASE);
         request.setQuantity(2);
 
         when(productRepository.decreaseStockIfAvailable(1L, 2)).thenReturn(1);
@@ -51,14 +53,14 @@ class ProductServiceTest {
     @Test
     void updateStockFailsWhenConditionalDecreaseAffectsNoRows() {
         ProductRequest.StockUpdate request = new ProductRequest.StockUpdate();
-        request.setOperation("DECREASE");
+        request.setOperation(ProductRequest.Operation.DECREASE);
         request.setQuantity(10);
 
         when(productRepository.decreaseStockIfAvailable(1L, 10)).thenReturn(0);
         when(productRepository.existsById(1L)).thenReturn(true);
 
         assertThatThrownBy(() -> productService.updateStock(1L, request))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessage("재고가 부족합니다");
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INSUFFICIENT_STOCK);
     }
 }

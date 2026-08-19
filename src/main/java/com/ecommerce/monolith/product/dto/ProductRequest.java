@@ -47,7 +47,11 @@ public class ProductRequest {
         @Min(value = 1, message = "수량은 1 이상이어야 합니다")
         private Integer quantity;
 
-        @NotBlank(message = "작업 타입은 필수입니다")
-        private String operation; // INCREASE, DECREASE
+        @NotNull(message = "작업 타입은 필수입니다")
+        private Operation operation;
+    }
+
+    public enum Operation {
+        INCREASE, DECREASE
     }
 }

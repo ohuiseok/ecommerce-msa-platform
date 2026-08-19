@@ -4,6 +4,7 @@ import com.ecommerce.monolith.order.dto.OrderRequest;
 import com.ecommerce.monolith.order.dto.OrderResponse;
 import com.ecommerce.monolith.order.entity.Order;
 import com.ecommerce.monolith.order.service.OrderService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
+@Tag(name = "Order", description = "주문 생성, 조회, 상태 변경, 취소 API")
 public class OrderController {
 
     private final OrderService orderService;
@@ -26,6 +28,15 @@ public class OrderController {
             Authentication authentication) {
         Long userId = (Long) authentication.getPrincipal();
         OrderResponse.OrderInfo orderInfo = orderService.createOrder(userId, request);
+        return ResponseEntity.ok(orderInfo);
+    }
+
+    @PostMapping("/checkout")
+    public ResponseEntity<OrderResponse.OrderInfo> checkout(
+            @Valid @RequestBody OrderRequest.Checkout request,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        OrderResponse.OrderInfo orderInfo = orderService.createOrderFromCart(userId, request);
         return ResponseEntity.ok(orderInfo);
     }
 

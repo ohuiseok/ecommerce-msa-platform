@@ -1,5 +1,6 @@
 package com.ecommerce.monolith.common;
 
+import com.ecommerce.monolith.common.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -18,6 +19,21 @@ import java.util.Map;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException ex, WebRequest request) {
+        log.warn("Business exception occurred: {} - {}", ex.getErrorCode(), ex.getMessage());
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(ex.getErrorCode().getStatus().value())
+                .error(ex.getErrorCode().getStatus().getReasonPhrase())
+                .message(ex.getMessage())
+                .path(getPath(request))
+                .build();
+
+        return ResponseEntity.status(ex.getErrorCode().getStatus()).body(errorResponse);
+    }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDeniedException(AccessDeniedException ex, WebRequest request) {

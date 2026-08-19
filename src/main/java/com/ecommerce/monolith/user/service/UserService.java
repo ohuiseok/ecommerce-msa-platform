@@ -1,5 +1,7 @@
 package com.ecommerce.monolith.user.service;
 
+import com.ecommerce.monolith.common.exception.BusinessException;
+import com.ecommerce.monolith.common.exception.ErrorCode;
 import com.ecommerce.monolith.user.dto.UserRequest;
 import com.ecommerce.monolith.user.dto.UserResponse;
 import com.ecommerce.monolith.user.entity.User;
@@ -26,7 +28,7 @@ public class UserService {
     public UserResponse.UserInfo register(UserRequest.Register request) {
         // 이메일 중복 확인
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("이미 존재하는 이메일입니다");
+            throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
         }
 
         // 사용자 생성
@@ -45,14 +47,14 @@ public class UserService {
 
     public UserResponse.LoginResponse login(UserRequest.Login request) {
         User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new RuntimeException("비밀번호가 일치하지 않습니다");
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
 
         if (user.getStatus() != User.UserStatus.ACTIVE) {
-            throw new RuntimeException("비활성화된 계정입니다");
+            throw new BusinessException(ErrorCode.ACCOUNT_DISABLED);
         }
 
         String accessToken = jwtUtil.generateToken(user.getEmail(), user.getUserId(), user.getRole());
@@ -69,7 +71,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserResponse.UserInfo getUserById(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         return UserResponse.UserInfo.from(user);
     }
@@ -82,7 +84,7 @@ public class UserService {
 
     public UserResponse.UserInfo updateUser(Long userId, UserRequest.Update request) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         if (request.getName() != null) {
             user.setName(request.getName());

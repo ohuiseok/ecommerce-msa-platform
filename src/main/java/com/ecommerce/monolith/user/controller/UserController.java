@@ -3,6 +3,7 @@ package com.ecommerce.monolith.user.controller;
 import com.ecommerce.monolith.user.dto.UserRequest;
 import com.ecommerce.monolith.user.dto.UserResponse;
 import com.ecommerce.monolith.user.service.UserService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
+@Tag(name = "User", description = "회원가입, 로그인, 사용자 관리 API")
 public class UserController {
 
     private final UserService userService;

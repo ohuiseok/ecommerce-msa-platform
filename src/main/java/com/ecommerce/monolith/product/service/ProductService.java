@@ -1,5 +1,7 @@
 package com.ecommerce.monolith.product.service;
 
+import com.ecommerce.monolith.common.exception.BusinessException;
+import com.ecommerce.monolith.common.exception.ErrorCode;
 import com.ecommerce.monolith.product.dto.ProductRequest;
 import com.ecommerce.monolith.product.dto.ProductResponse;
 import com.ecommerce.monolith.product.entity.Product;
@@ -43,7 +45,7 @@ public class ProductService {
     @Transactional(readOnly = true)
     public ProductResponse.ProductInfo getProduct(Long productId) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new RuntimeException("상품을 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
         return ProductResponse.ProductInfo.from(product);
     }
@@ -104,7 +106,7 @@ public class ProductService {
 
     public ProductResponse.ProductInfo updateProduct(Long productId, ProductRequest.Update request) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new RuntimeException("상품을 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
         if (request.getName() != null) {
             product.setName(request.getName());
@@ -135,24 +137,20 @@ public class ProductService {
     }
 
     public ProductResponse.StockInfo updateStock(Long productId, ProductRequest.StockUpdate request) {
-        int updatedRows;
-        if ("INCREASE".equals(request.getOperation())) {
-            updatedRows = productRepository.increaseStock(productId, request.getQuantity());
-        } else if ("DECREASE".equals(request.getOperation())) {
-            updatedRows = productRepository.decreaseStockIfAvailable(productId, request.getQuantity());
-        } else {
-            throw new RuntimeException("유효하지 않은 재고 작업입니다");
-        }
+        int updatedRows = switch (request.getOperation()) {
+            case INCREASE -> productRepository.increaseStock(productId, request.getQuantity());
+            case DECREASE -> productRepository.decreaseStockIfAvailable(productId, request.getQuantity());
+        };
 
         if (updatedRows == 0) {
             if (!productRepository.existsById(productId)) {
-                throw new RuntimeException("상품을 찾을 수 없습니다");
+                throw new BusinessException(ErrorCode.PRODUCT_NOT_FOUND);
             }
-            throw new RuntimeException("재고가 부족합니다");
+            throw new BusinessException(ErrorCode.INSUFFICIENT_STOCK);
         }
 
         Product updatedProduct = productRepository.findById(productId)
-                .orElseThrow(() -> new RuntimeException("상품을 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
         log.info("Product stock updated: {} {} {}", 
                 updatedProduct.getName(), request.getOperation(), request.getQuantity());
@@ -163,7 +161,7 @@ public class ProductService {
     @Transactional(readOnly = true)
     public ProductResponse.StockInfo checkStock(Long productId) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new RuntimeException("상품을 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
         return ProductResponse.StockInfo.from(product);
     }
@@ -178,7 +176,7 @@ public class ProductService {
 
     public void deleteProduct(Long productId) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new RuntimeException("상품을 찾을 수 없습니다"));
+                .orElseThrow(() -> new BusinessException(ErrorCode.PRODUCT_NOT_FOUND));
 
         product.setStatus(Product.ProductStatus.INACTIVE);
         productRepository.save(product);
