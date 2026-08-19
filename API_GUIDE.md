@@ -154,6 +154,48 @@ curl -X PUT http://localhost:8080/api/cart/items/1 \
   -d '{"quantity": 3}'
 ```
 
+## Coupon API
+
+쿠폰 생성은 관리자 토큰이 필요합니다.
+
+```bash
+curl -X POST http://localhost:8080/api/coupons \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -d '{
+    "code": "WELCOME5000",
+    "name": "신규 가입 5천원 할인",
+    "discountType": "FIXED_AMOUNT",
+    "discountValue": 5000,
+    "minOrderAmount": 10000,
+    "validFrom": "2026-01-01T00:00:00",
+    "validUntil": "2026-12-31T23:59:59",
+    "issueLimit": 1000
+  }'
+```
+
+발급 가능한 쿠폰 목록 (공개 API):
+
+```bash
+curl "http://localhost:8080/api/coupons?page=0&size=10"
+```
+
+쿠폰 발급 (로그인한 사용자 본인에게 발급):
+
+```bash
+curl -X POST http://localhost:8080/api/coupons/1/issue \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+응답의 `userCouponId`를 주문 생성/체크아웃 시 `userCouponId` 필드에 담아 사용합니다.
+
+내 보유 쿠폰 목록:
+
+```bash
+curl http://localhost:8080/api/coupons/my \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
 ## Order API
 
 주문 생성 (상품을 직접 지정):
@@ -179,7 +221,7 @@ curl -X POST http://localhost:8080/api/orders \
   }'
 ```
 
-장바구니 기반 체크아웃 (담긴 상품으로 주문을 만들고 장바구니를 비웁니다):
+장바구니 기반 체크아웃 (담긴 상품으로 주문을 만들고 장바구니를 비웁니다. `userCouponId`는 선택 항목입니다):
 
 ```bash
 curl -X POST http://localhost:8080/api/orders/checkout \
@@ -192,9 +234,12 @@ curl -X POST http://localhost:8080/api/orders/checkout \
       "detailAddress": "456호",
       "recipientName": "홍길동",
       "recipientPhone": "010-1234-5678"
-    }
+    },
+    "userCouponId": 1
   }'
 ```
+
+응답의 `originalAmount`(할인 전 금액), `discountAmount`(할인액), `totalAmount`(실 결제 금액)로 쿠폰 적용 결과를 확인합니다.
 
 주문 조회:
 

@@ -2,6 +2,7 @@ package com.ecommerce.monolith.order.service;
 
 import com.ecommerce.monolith.cart.dto.CartResponse;
 import com.ecommerce.monolith.cart.service.CartService;
+import com.ecommerce.monolith.coupon.service.CouponService;
 import com.ecommerce.monolith.common.exception.BusinessException;
 import com.ecommerce.monolith.common.exception.ErrorCode;
 import com.ecommerce.monolith.order.dto.OrderRequest;
@@ -34,6 +35,7 @@ public class OrderService {
     private final UserService userService;
     private final ProductService productService;
     private final CartService cartService;
+    private final CouponService couponService;
 
     public OrderResponse.OrderInfo createOrder(Long userId, OrderRequest.Create request) {
         // 1. 사용자 정보 확인
@@ -51,11 +53,13 @@ public class OrderService {
             addOrderItem(order, itemRequest.getProductId(), itemRequest.getQuantity());
         }
 
-        // 4. 총 금액 계산
-        order.calculateTotalAmount();
+        // 4. 금액 계산 및 쿠폰 적용
+        order.calculateAmounts();
+        applyCouponIfPresent(order, userId, request.getUserCouponId());
 
         // 5. 주문 저장
         Order savedOrder = orderRepository.save(order);
+        markCouponUsedIfPresent(request.getUserCouponId(), savedOrder.getOrderId());
 
         log.info("Order created successfully: orderId={}, userId={}, totalAmount={}",
                 savedOrder.getOrderId(), savedOrder.getUserId(), savedOrder.getTotalAmount());
@@ -81,14 +85,32 @@ public class OrderService {
             addOrderItem(order, item.getProductId(), item.getQuantity());
         }
 
-        order.calculateTotalAmount();
+        order.calculateAmounts();
+        applyCouponIfPresent(order, userId, request.getUserCouponId());
+
         Order savedOrder = orderRepository.save(order);
+        markCouponUsedIfPresent(request.getUserCouponId(), savedOrder.getOrderId());
         cartService.clearCart(userId);
 
         log.info("Order created from cart: orderId={}, userId={}, totalAmount={}",
                 savedOrder.getOrderId(), savedOrder.getUserId(), savedOrder.getTotalAmount());
 
         return OrderResponse.OrderInfo.from(savedOrder);
+    }
+
+    private void applyCouponIfPresent(Order order, Long userId, Long userCouponId) {
+        if (userCouponId == null) {
+            return;
+        }
+
+        BigDecimal discount = couponService.calculateDiscount(userId, userCouponId, order.getOriginalAmount());
+        order.applyDiscount(discount, userCouponId);
+    }
+
+    private void markCouponUsedIfPresent(Long userCouponId, Long orderId) {
+        if (userCouponId != null) {
+            couponService.markUsed(userCouponId, orderId);
+        }
     }
 
     private void addOrderItem(Order order, Long productId, Integer quantity) {
@@ -183,6 +205,11 @@ public class OrderService {
             request.setOperation(ProductRequest.Operation.INCREASE);
 
             productService.updateStock(orderItem.getProductId(), request);
+        }
+
+        // 쿠폰 복원
+        if (order.getUserCouponId() != null) {
+            couponService.restoreCoupon(order.getUserCouponId());
         }
 
         log.info("Order cancelled successfully: orderId={}", orderId);

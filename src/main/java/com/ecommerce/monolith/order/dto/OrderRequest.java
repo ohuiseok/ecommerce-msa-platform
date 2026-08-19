@@ -22,6 +22,9 @@ public class OrderRequest {
         @NotNull(message = "배송 주소는 필수입니다")
         @Valid
         private ShippingAddressRequest shippingAddress;
+
+        /** 사용할 보유 쿠폰(UserCoupon) ID. 쿠폰을 사용하지 않으면 null. */
+        private Long userCouponId;
     }
 
     @Data
@@ -62,5 +65,8 @@ public class OrderRequest {
         @NotNull(message = "배송 주소는 필수입니다")
         @Valid
         private ShippingAddressRequest shippingAddress;
+
+        /** 사용할 보유 쿠폰(UserCoupon) ID. 쿠폰을 사용하지 않으면 null. */
+        private Long userCouponId;
     }
 }

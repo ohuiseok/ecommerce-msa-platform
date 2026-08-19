@@ -18,7 +18,10 @@ public class OrderResponse {
     public static class OrderInfo {
         private Long orderId;
         private Long userId;
+        private BigDecimal originalAmount;
+        private BigDecimal discountAmount;
         private BigDecimal totalAmount;
+        private Long userCouponId;
         private Order.OrderStatus status;
         private ShippingAddressInfo shippingAddress;
         private List<OrderItemInfo> orderItems;
@@ -29,7 +32,10 @@ public class OrderResponse {
             return OrderInfo.builder()
                     .orderId(order.getOrderId())
                     .userId(order.getUserId())
+                    .originalAmount(order.getOriginalAmount())
+                    .discountAmount(order.getDiscountAmount())
                     .totalAmount(order.getTotalAmount())
+                    .userCouponId(order.getUserCouponId())
                     .status(order.getStatus())
                     .shippingAddress(ShippingAddressInfo.from(order.getShippingAddress()))
                     .orderItems(order.getOrderItems().stream()

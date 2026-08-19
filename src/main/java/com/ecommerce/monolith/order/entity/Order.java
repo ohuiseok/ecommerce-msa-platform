@@ -33,6 +33,17 @@ public class Order {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
 
+    @Column(nullable = false, precision = 10, scale = 2)
+    @Builder.Default
+    private BigDecimal originalAmount = BigDecimal.ZERO;
+
+    @Column(nullable = false, precision = 10, scale = 2)
+    @Builder.Default
+    private BigDecimal discountAmount = BigDecimal.ZERO;
+
+    /** 이 주문에 적용된 UserCoupon ID. 쿠폰을 사용하지 않았다면 null. */
+    private Long userCouponId;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private OrderStatus status = OrderStatus.PENDING;
@@ -70,9 +81,16 @@ public class Order {
         this.status = status;
     }
 
-    public void calculateTotalAmount() {
-        this.totalAmount = orderItems.stream()
+    public void calculateAmounts() {
+        this.originalAmount = orderItems.stream()
                 .map(item -> item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        this.totalAmount = this.originalAmount.subtract(this.discountAmount);
+    }
+
+    public void applyDiscount(BigDecimal discountAmount, Long userCouponId) {
+        this.discountAmount = discountAmount;
+        this.userCouponId = userCouponId;
+        this.totalAmount = this.originalAmount.subtract(discountAmount);
     }
 }

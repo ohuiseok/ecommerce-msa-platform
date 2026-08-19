@@ -13,7 +13,8 @@ src/main/java/com/ecommerce/monolith/
 ├── product/     # 상품 조회, 검색, 재고 관리
 ├── cart/        # 장바구니 조회 및 상품 담기/수정/삭제
 ├── order/       # 주문 생성, 체크아웃, 조회, 상태 변경, 취소
-└── payment/     # 모의 PG 연동 결제 요청/조회/취소
+├── payment/     # 모의 PG 연동 결제 요청/조회/취소
+└── coupon/      # 쿠폰 발급, 보유 쿠폰 조회, 체크아웃 시 할인 적용
 ```
 
 ## 기술 스택
@@ -126,7 +127,7 @@ Gradle wrapper가 포함되어 있어 로컬 Gradle 설치 없이 실행할 수 
 - `PUT /api/orders/{orderId}/status`
 - `DELETE /api/orders/{orderId}`
 
-주문 API는 JWT 인증이 필요합니다. 사용자별 조회, 단건 조회, 취소는 본인 주문 또는 관리자만 접근할 수 있습니다. 상태별 주문 조회와 주문 상태 변경은 관리자만 접근할 수 있습니다. 주문은 생성 시 `PENDING` 상태이며, 결제가 완료되면 `CONFIRMED`로 전환됩니다.
+주문 API는 JWT 인증이 필요합니다. 사용자별 조회, 단건 조회, 취소는 본인 주문 또는 관리자만 접근할 수 있습니다. 상태별 주문 조회와 주문 상태 변경은 관리자만 접근할 수 있습니다. 주문은 생성 시 `PENDING` 상태이며, 결제가 완료되면 `CONFIRMED`로 전환됩니다. `POST /api/orders`와 `/checkout` 요청에 `userCouponId`를 함께 보내면 보유 쿠폰이 적용되어 `originalAmount`에서 `discountAmount`만큼 할인된 `totalAmount`로 주문이 생성되고, 주문을 취소하면 쿠폰은 다시 사용 가능한 상태로 복원됩니다.
 
 ### Payment
 
@@ -136,6 +137,16 @@ Gradle wrapper가 포함되어 있어 로컬 Gradle 설치 없이 실행할 수 
 - `DELETE /api/payments/{paymentId}` (결제 취소/환불, 관리자 전용)
 
 결제 API는 JWT 인증이 필요하며 본인 주문 또는 관리자만 접근할 수 있습니다. `CARD` 결제는 모의 카드번호 마지막 자리가 짝수이면 승인, 홀수면 거절되도록 시뮬레이션합니다. 결제가 승인되면 연결된 주문 상태가 자동으로 `CONFIRMED`로 바뀝니다.
+
+### Coupon
+
+- `POST /api/coupons` (쿠폰 생성, 관리자 전용)
+- `GET /api/coupons` (현재 발급 가능한 쿠폰 목록)
+- `GET /api/coupons/{couponId}`
+- `POST /api/coupons/{couponId}/issue` (본인에게 쿠폰 발급)
+- `GET /api/coupons/my` (내가 보유한 쿠폰 목록)
+
+쿠폰 조회는 공개 API이고, 발급/보유 쿠폰 조회는 JWT 인증이 필요합니다. 쿠폰은 정액(`FIXED_AMOUNT`) 또는 정률(`PERCENTAGE`, `maxDiscountAmount`로 한도 설정 가능) 할인을 지원하며 `minOrderAmount`, `validFrom`~`validUntil`, `issueLimit`(전체 발급 수량)을 검증합니다. 발급 수량 제한은 재고 차감과 동일하게 조건부 UPDATE 쿼리로 동시 발급 시 초과 발급을 방지합니다. 한 사용자는 동일 쿠폰을 한 번만 발급받을 수 있고, 쿠폰 1개는 주문 1건에만 사용할 수 있습니다.
 
 ### 오류 응답
 
@@ -185,10 +196,11 @@ curl http://localhost:8080/api/orders/1 \
 ./gradlew test
 ```
 
-- 서비스 단위 테스트(Mockito): User/Product/Order/Cart/Payment
+- 서비스 단위 테스트(Mockito): User/Product/Order/Cart/Payment/Coupon
 - 통합 테스트(Testcontainers PostgreSQL, Docker 필요):
   - `ProductConcurrencyIntegrationTest`: 재고보다 많은 동시 요청에도 오버셀이 발생하지 않는지 검증 (조건부 UPDATE 쿼리 동시성 테스트)
   - `OrderCheckoutIntegrationTest`: 회원가입 → 로그인 → 관리자 상품 등록 → 장바구니 담기 → 체크아웃 → 결제까지 HTTP 계층 전체 흐름 검증 (결제 성공/실패, 재결제 방지, 빈 장바구니 체크아웃 방지 포함)
+  - `CouponCheckoutIntegrationTest`: 쿠폰 발급 → 체크아웃 할인 적용 → 주문 취소 시 쿠폰 복원, 최소 주문 금액 미충족 시 체크아웃 거부 검증
 
 ## 빌드
 
