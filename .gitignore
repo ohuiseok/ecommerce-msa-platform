@@ -1,5 +1,6 @@
 # Gradle
 .gradle/
+.gradle-home/
 build/
 target/
 gradle-app.setting
@@ -25,6 +26,10 @@ Thumbs.db
 *.nar
 hs_err_pid*
 replay_pid*
+
+# Gradle wrapper
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
 
 # Spring Boot
 *.log

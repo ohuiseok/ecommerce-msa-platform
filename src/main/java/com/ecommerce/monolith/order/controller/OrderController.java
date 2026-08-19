@@ -1,0 +1,76 @@
+package com.ecommerce.monolith.order.controller;
+
+import com.ecommerce.monolith.order.dto.OrderRequest;
+import com.ecommerce.monolith.order.dto.OrderResponse;
+import com.ecommerce.monolith.order.entity.Order;
+import com.ecommerce.monolith.order.service.OrderService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/orders")
+@RequiredArgsConstructor
+public class OrderController {
+
+    private final OrderService orderService;
+
+    @PostMapping
+    public ResponseEntity<OrderResponse.OrderInfo> createOrder(
+            @Valid @RequestBody OrderRequest.Create request,
+            Authentication authentication) {
+        Long userId = (Long) authentication.getPrincipal();
+        OrderResponse.OrderInfo orderInfo = orderService.createOrder(userId, request);
+        return ResponseEntity.ok(orderInfo);
+    }
+
+    @GetMapping("/{orderId}")
+    public ResponseEntity<OrderResponse.OrderInfo> getOrder(@PathVariable Long orderId) {
+        OrderResponse.OrderInfo orderInfo = orderService.getOrder(orderId);
+        return ResponseEntity.ok(orderInfo);
+    }
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<Page<OrderResponse.OrderInfo>> getOrdersByUserId(
+            @PathVariable Long userId, Pageable pageable) {
+        Page<OrderResponse.OrderInfo> orders = orderService.getOrdersByUserId(userId, pageable);
+        return ResponseEntity.ok(orders);
+    }
+
+    @GetMapping("/status/{status}")
+    public ResponseEntity<Page<OrderResponse.OrderInfo>> getOrdersByStatus(
+            @PathVariable String status, Pageable pageable) {
+        Order.OrderStatus orderStatus;
+        try {
+            orderStatus = Order.OrderStatus.valueOf(status.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+        
+        Page<OrderResponse.OrderInfo> orders = orderService.getOrdersByStatus(orderStatus, pageable);
+        return ResponseEntity.ok(orders);
+    }
+
+    @PutMapping("/{orderId}/status")
+    public ResponseEntity<OrderResponse.OrderInfo> updateOrderStatus(
+            @PathVariable Long orderId,
+            @Valid @RequestBody OrderRequest.StatusUpdate request) {
+        OrderResponse.OrderInfo orderInfo = orderService.updateOrderStatus(orderId, request);
+        return ResponseEntity.ok(orderInfo);
+    }
+
+    @DeleteMapping("/{orderId}")
+    public ResponseEntity<Void> cancelOrder(@PathVariable Long orderId) {
+        orderService.cancelOrder(orderId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/health")
+    public ResponseEntity<String> health() {
+        return ResponseEntity.ok("Order Service is running");
+    }
+}
