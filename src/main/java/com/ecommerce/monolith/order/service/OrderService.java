@@ -190,12 +190,7 @@ public class OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
 
-        if (order.getStatus() == Order.OrderStatus.SHIPPED ||
-            order.getStatus() == Order.OrderStatus.DELIVERED) {
-            throw new BusinessException(ErrorCode.ORDER_CANCELLATION_NOT_ALLOWED);
-        }
-
-        order.updateStatus(Order.OrderStatus.CANCELLED);
+        order.cancelByUser();
         orderRepository.save(order);
 
         // 재고 복원

@@ -1,5 +1,7 @@
 package com.ecommerce.monolith.order.entity;
 
+import com.ecommerce.monolith.common.exception.BusinessException;
+import com.ecommerce.monolith.common.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,7 +14,11 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Entity
 @Table(name = "orders")
@@ -72,13 +78,49 @@ public class Order {
         CANCELLED       // 주문 취소
     }
 
+    private static final Map<OrderStatus, Set<OrderStatus>> ALLOWED_STATUS_TRANSITIONS = new EnumMap<>(OrderStatus.class);
+
+    static {
+        ALLOWED_STATUS_TRANSITIONS.put(OrderStatus.PENDING, EnumSet.of(OrderStatus.CONFIRMED, OrderStatus.CANCELLED));
+        ALLOWED_STATUS_TRANSITIONS.put(OrderStatus.CONFIRMED, EnumSet.of(OrderStatus.PROCESSING, OrderStatus.CANCELLED));
+        ALLOWED_STATUS_TRANSITIONS.put(OrderStatus.PROCESSING, EnumSet.of(OrderStatus.SHIPPED, OrderStatus.CANCELLED));
+        ALLOWED_STATUS_TRANSITIONS.put(OrderStatus.SHIPPED, EnumSet.of(OrderStatus.DELIVERED));
+        ALLOWED_STATUS_TRANSITIONS.put(OrderStatus.DELIVERED, EnumSet.noneOf(OrderStatus.class));
+        ALLOWED_STATUS_TRANSITIONS.put(OrderStatus.CANCELLED, EnumSet.noneOf(OrderStatus.class));
+    }
+
     public void addOrderItem(OrderItem orderItem) {
         orderItems.add(orderItem);
         orderItem.setOrder(this);
     }
 
     public void updateStatus(OrderStatus status) {
+        if (!canTransitionTo(status)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_ORDER_STATUS,
+                    "허용되지 않은 주문 상태 전이입니다: " + this.status + " -> " + status
+            );
+        }
         this.status = status;
+    }
+
+    public boolean canTransitionTo(OrderStatus nextStatus) {
+        if (nextStatus == null) {
+            return false;
+        }
+        return ALLOWED_STATUS_TRANSITIONS
+                .getOrDefault(this.status, Set.of())
+                .contains(nextStatus);
+    }
+
+    public void cancelByUser() {
+        if (this.status != OrderStatus.PENDING && this.status != OrderStatus.CONFIRMED) {
+            throw new BusinessException(
+                    ErrorCode.ORDER_CANCELLATION_NOT_ALLOWED,
+                    "사용자 취소는 결제 대기 또는 결제 확정 상태에서만 가능합니다"
+            );
+        }
+        updateStatus(OrderStatus.CANCELLED);
     }
 
     public void calculateAmounts() {
