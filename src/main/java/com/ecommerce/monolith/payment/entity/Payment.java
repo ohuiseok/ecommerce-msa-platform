@@ -42,6 +42,9 @@ public class Payment {
     @Builder.Default
     private PaymentStatus status = PaymentStatus.PENDING;
 
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
+
     private String pgTransactionId;
 
     private String failureReason;

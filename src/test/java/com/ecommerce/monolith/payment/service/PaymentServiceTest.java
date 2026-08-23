@@ -122,4 +122,21 @@ class PaymentServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PAYMENT_ALREADY_PROCESSED);
     }
+
+    @Test
+    void paymentResponseIncludesNullableIdempotencyKey() {
+        Payment payment = Payment.builder()
+                .paymentId(1L)
+                .orderId(1L)
+                .userId(1L)
+                .amount(BigDecimal.valueOf(2000))
+                .method(Payment.PaymentMethod.CARD)
+                .status(Payment.PaymentStatus.PENDING)
+                .idempotencyKey("pay-key-1")
+                .build();
+
+        PaymentResponse.PaymentInfo result = PaymentResponse.PaymentInfo.from(payment);
+
+        assertThat(result.getIdempotencyKey()).isEqualTo("pay-key-1");
+    }
 }

@@ -18,6 +18,7 @@ public class PaymentResponse {
         private BigDecimal amount;
         private Payment.PaymentMethod method;
         private Payment.PaymentStatus status;
+        private String idempotencyKey;
         private String pgTransactionId;
         private String failureReason;
         private LocalDateTime approvedAt;
@@ -32,6 +33,7 @@ public class PaymentResponse {
                     .amount(payment.getAmount())
                     .method(payment.getMethod())
                     .status(payment.getStatus())
+                    .idempotencyKey(payment.getIdempotencyKey())
                     .pgTransactionId(payment.getPgTransactionId())
                     .failureReason(payment.getFailureReason())
                     .approvedAt(payment.getApprovedAt())
