@@ -13,7 +13,13 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "payments")
+@Table(
+        name = "payments",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_payments_order_id_idempotency_key",
+                columnNames = {"order_id", "idempotency_key"}
+        )
+)
 @Data
 @Builder
 @NoArgsConstructor
@@ -25,10 +31,10 @@ public class Payment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long paymentId;
 
-    @Column(nullable = false)
+    @Column(name = "order_id", nullable = false)
     private Long orderId;
 
-    @Column(nullable = false)
+    @Column(name = "user_id", nullable = false)
     private Long userId;
 
     @Column(nullable = false, precision = 10, scale = 2)
@@ -45,10 +51,13 @@ public class Payment {
     @Column(name = "idempotency_key", length = 100)
     private String idempotencyKey;
 
+    @Column(name = "pg_transaction_id")
     private String pgTransactionId;
 
+    @Column(name = "failure_reason")
     private String failureReason;
 
+    @Column(name = "approved_at")
     private LocalDateTime approvedAt;
 
     @CreatedDate

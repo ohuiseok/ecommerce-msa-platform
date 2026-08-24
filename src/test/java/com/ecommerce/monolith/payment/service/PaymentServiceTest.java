@@ -47,6 +47,7 @@ class PaymentServiceTest {
         request.setOrderId(1L);
         request.setMethod(Payment.PaymentMethod.CARD);
         request.setCardNumber("1234567890123452");
+        request.setIdempotencyKey(" pay-key-1 ");
 
         when(orderService.getOrder(1L)).thenReturn(OrderResponse.OrderInfo.builder()
                 .orderId(1L)
@@ -54,7 +55,8 @@ class PaymentServiceTest {
                 .totalAmount(BigDecimal.valueOf(2000))
                 .status(Order.OrderStatus.PENDING)
                 .build());
-        when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.empty());
+        when(paymentRepository.findByOrderIdAndIdempotencyKey(1L, "pay-key-1")).thenReturn(Optional.empty());
+        when(paymentRepository.existsByOrderIdAndStatus(1L, Payment.PaymentStatus.COMPLETED)).thenReturn(false);
         when(mockPgClient.charge(BigDecimal.valueOf(2000), Payment.PaymentMethod.CARD, "1234567890123452"))
                 .thenReturn(MockPgClient.PgResult.success("MOCK-TX-1"));
         when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> {
@@ -67,6 +69,7 @@ class PaymentServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(Payment.PaymentStatus.COMPLETED);
         assertThat(result.getPgTransactionId()).isEqualTo("MOCK-TX-1");
+        assertThat(result.getIdempotencyKey()).isEqualTo("pay-key-1");
         verify(orderService).markOrderConfirmed(1L);
     }
 
@@ -76,6 +79,7 @@ class PaymentServiceTest {
         request.setOrderId(1L);
         request.setMethod(Payment.PaymentMethod.CARD);
         request.setCardNumber("1234567890123451");
+        request.setIdempotencyKey("pay-key-2");
 
         when(orderService.getOrder(1L)).thenReturn(OrderResponse.OrderInfo.builder()
                 .orderId(1L)
@@ -83,7 +87,8 @@ class PaymentServiceTest {
                 .totalAmount(BigDecimal.valueOf(2000))
                 .status(Order.OrderStatus.PENDING)
                 .build());
-        when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.empty());
+        when(paymentRepository.findByOrderIdAndIdempotencyKey(1L, "pay-key-2")).thenReturn(Optional.empty());
+        when(paymentRepository.existsByOrderIdAndStatus(1L, Payment.PaymentStatus.COMPLETED)).thenReturn(false);
         when(mockPgClient.charge(BigDecimal.valueOf(2000), Payment.PaymentMethod.CARD, "1234567890123451"))
                 .thenReturn(MockPgClient.PgResult.failure("카드 승인이 거절되었습니다"));
         when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -100,6 +105,7 @@ class PaymentServiceTest {
         PaymentRequest.Create request = new PaymentRequest.Create();
         request.setOrderId(1L);
         request.setMethod(Payment.PaymentMethod.CARD);
+        request.setIdempotencyKey("pay-key-3");
 
         Payment existing = Payment.builder()
                 .paymentId(1L)
@@ -116,11 +122,49 @@ class PaymentServiceTest {
                 .totalAmount(BigDecimal.valueOf(2000))
                 .status(Order.OrderStatus.CONFIRMED)
                 .build());
-        when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.of(existing));
+        when(paymentRepository.findByOrderIdAndIdempotencyKey(1L, "pay-key-3")).thenReturn(Optional.empty());
+        when(paymentRepository.existsByOrderIdAndStatus(1L, Payment.PaymentStatus.COMPLETED)).thenReturn(true);
 
         assertThatThrownBy(() -> paymentService.requestPayment(request))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.PAYMENT_ALREADY_PROCESSED);
+    }
+
+    @Test
+    void requestPaymentReturnsExistingPaymentForSameIdempotencyKeyWithoutPgCall() {
+        PaymentRequest.Create request = new PaymentRequest.Create();
+        request.setOrderId(1L);
+        request.setMethod(Payment.PaymentMethod.CARD);
+        request.setCardNumber("1234567890123452");
+        request.setIdempotencyKey("pay-key-4");
+
+        Payment existing = Payment.builder()
+                .paymentId(100L)
+                .orderId(1L)
+                .userId(1L)
+                .amount(BigDecimal.valueOf(2000))
+                .method(Payment.PaymentMethod.CARD)
+                .status(Payment.PaymentStatus.FAILED)
+                .idempotencyKey("pay-key-4")
+                .failureReason("카드 승인이 거절되었습니다")
+                .build();
+
+        when(orderService.getOrder(1L)).thenReturn(OrderResponse.OrderInfo.builder()
+                .orderId(1L)
+                .userId(1L)
+                .totalAmount(BigDecimal.valueOf(2000))
+                .status(Order.OrderStatus.PENDING)
+                .build());
+        when(paymentRepository.findByOrderIdAndIdempotencyKey(1L, "pay-key-4")).thenReturn(Optional.of(existing));
+
+        PaymentResponse.PaymentInfo result = paymentService.requestPayment(request);
+
+        assertThat(result.getPaymentId()).isEqualTo(100L);
+        assertThat(result.getStatus()).isEqualTo(Payment.PaymentStatus.FAILED);
+        assertThat(result.getIdempotencyKey()).isEqualTo("pay-key-4");
+        verify(mockPgClient, never()).charge(any(), any(), any());
+        verify(paymentRepository, never()).save(any());
+        verify(orderService, never()).markOrderConfirmed(any());
     }
 
     @Test

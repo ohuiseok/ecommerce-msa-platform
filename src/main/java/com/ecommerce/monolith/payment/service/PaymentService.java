@@ -26,18 +26,32 @@ public class PaymentService {
 
     public PaymentResponse.PaymentInfo requestPayment(PaymentRequest.Create request) {
         OrderResponse.OrderInfo order = orderService.getOrder(request.getOrderId());
+        String idempotencyKey = request.getIdempotencyKey().trim();
 
-        paymentRepository.findByOrderId(order.getOrderId())
-                .filter(payment -> payment.getStatus() == Payment.PaymentStatus.COMPLETED)
-                .ifPresent(payment -> {
-                    throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED);
-                });
+        return paymentRepository.findByOrderIdAndIdempotencyKey(order.getOrderId(), idempotencyKey)
+                .map(payment -> {
+                    log.info("Idempotent payment retry returned existing result: orderId={}, paymentId={}",
+                            order.getOrderId(), payment.getPaymentId());
+                    return PaymentResponse.PaymentInfo.from(payment);
+                })
+                .orElseGet(() -> createPayment(request, order, idempotencyKey));
+    }
+
+    private PaymentResponse.PaymentInfo createPayment(
+            PaymentRequest.Create request,
+            OrderResponse.OrderInfo order,
+            String idempotencyKey
+    ) {
+        if (paymentRepository.existsByOrderIdAndStatus(order.getOrderId(), Payment.PaymentStatus.COMPLETED)) {
+            throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED);
+        }
 
         Payment payment = Payment.builder()
                 .orderId(order.getOrderId())
                 .userId(order.getUserId())
                 .amount(order.getTotalAmount())
                 .method(request.getMethod())
+                .idempotencyKey(idempotencyKey)
                 .build();
 
         MockPgClient.PgResult result = mockPgClient.charge(payment.getAmount(), payment.getMethod(), request.getCardNumber());

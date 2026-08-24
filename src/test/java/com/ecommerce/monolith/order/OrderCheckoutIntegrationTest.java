@@ -64,8 +64,8 @@ class OrderCheckoutIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"orderId": %d, "method": "CARD", "cardNumber": "4111111111111112"}
-                                """.formatted(orderId)))
+                                {"orderId": %d, "method": "CARD", "idempotencyKey": "second-payment-key-%d", "cardNumber": "4111111111111112"}
+                                """.formatted(orderId, orderId)))
                 .andExpect(status().isConflict());
     }
 
@@ -167,8 +167,8 @@ class OrderCheckoutIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"orderId": %d, "method": "%s", "cardNumber": "%s"}
-                                """.formatted(orderId, method, cardNumber)))
+                                {"orderId": %d, "method": "%s", "idempotencyKey": "payment-key-%d", "cardNumber": "%s"}
+                                """.formatted(orderId, method, orderId, cardNumber)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 

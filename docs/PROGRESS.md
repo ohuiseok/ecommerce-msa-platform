@@ -120,12 +120,12 @@
 - 2026-08-21: Phase 1 Day 2 - `Order` 상태 변경 메서드에 ADR-001 전이 검증을 추가했다.
 - 2026-08-22: Phase 1 Day 3 - ADR-002 결제 idempotency key 정책 문서를 작성했다.
 - 2026-08-23: Phase 1 Day 4 - `payments`에 nullable idempotency key 컬럼을 추가했다.
+- 2026-08-24: Phase 1 Day 5 - `orderId + idempotencyKey` 유니크 제약과 동일 키 재요청 시 기존 결제 결과 반환 로직을 추가했다.
 
 ## 다음 작업
 
 아래 목록은 자동 작업 프롬프트에서 하나씩 선택해 처리하기 위한 실행 큐다. 한 번에 하나의 항목만 진행하고, 항목이 크면 해당 항목 아래의 가장 작은 하위 단계 하나만 처리한다. 테스트가 통과해 커밋한 항목은 `완료`로 옮기고 이 목록에서 제거한다.
 
-- [ ] Phase 1 Day 5: 선택된 idempotency scope에 맞는 unique index와 재요청 시 기존 결과 반환 로직을 추가한다.
 - [ ] Phase 1 Day 6: 쿠폰 사용을 `ISSUED` 상태 조건부 업데이트로 변경한다.
 - [ ] Phase 1 Day 7: 결제-주문 불일치 조회 쿼리를 만든다.
 - [ ] Phase 1 Day 8: traceId를 MDC에 넣고 주문·결제·쿠폰 로그 필드를 통일한다.
