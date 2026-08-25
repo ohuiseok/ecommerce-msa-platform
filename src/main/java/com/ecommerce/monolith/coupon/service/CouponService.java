@@ -118,11 +118,13 @@ public class CouponService {
     }
 
     public void markUsed(Long userCouponId, Long orderId) {
-        UserCoupon userCoupon = userCouponRepository.findById(userCouponId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_COUPON_NOT_FOUND));
-
-        userCoupon.use(orderId);
-        userCouponRepository.save(userCoupon);
+        int updatedRows = userCouponRepository.markUsedIfIssued(userCouponId, orderId);
+        if (updatedRows == 0) {
+            if (!userCouponRepository.existsById(userCouponId)) {
+                throw new BusinessException(ErrorCode.USER_COUPON_NOT_FOUND);
+            }
+            throw new BusinessException(ErrorCode.COUPON_ALREADY_USED);
+        }
     }
 
     public void restoreCoupon(Long userCouponId) {

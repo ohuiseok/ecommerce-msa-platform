@@ -20,6 +20,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -211,6 +213,36 @@ class CouponServiceTest {
         BigDecimal discount = couponService.calculateDiscount(1L, 10L, BigDecimal.valueOf(10000));
 
         assertThat(discount).isEqualByComparingTo(BigDecimal.valueOf(3000));
+    }
+
+    @Test
+    void markUsedUpdatesOnlyIssuedCoupon() {
+        when(userCouponRepository.markUsedIfIssued(10L, 20L)).thenReturn(1);
+
+        couponService.markUsed(10L, 20L);
+
+        verify(userCouponRepository).markUsedIfIssued(10L, 20L);
+        verify(userCouponRepository, never()).save(any(UserCoupon.class));
+    }
+
+    @Test
+    void markUsedThrowsWhenCouponAlreadyUsed() {
+        when(userCouponRepository.markUsedIfIssued(10L, 20L)).thenReturn(0);
+        when(userCouponRepository.existsById(10L)).thenReturn(true);
+
+        assertThatThrownBy(() -> couponService.markUsed(10L, 20L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.COUPON_ALREADY_USED);
+    }
+
+    @Test
+    void markUsedThrowsWhenUserCouponNotFound() {
+        when(userCouponRepository.markUsedIfIssued(10L, 20L)).thenReturn(0);
+        when(userCouponRepository.existsById(10L)).thenReturn(false);
+
+        assertThatThrownBy(() -> couponService.markUsed(10L, 20L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.USER_COUPON_NOT_FOUND);
     }
 
     @Test
