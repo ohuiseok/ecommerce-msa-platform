@@ -1,6 +1,7 @@
 package com.ecommerce.monolith.payment.dto;
 
 import com.ecommerce.monolith.payment.entity.Payment;
+import com.ecommerce.monolith.payment.repository.PaymentOrderMismatchProjection;
 import lombok.Builder;
 import lombok.Data;
 
@@ -39,6 +40,34 @@ public class PaymentResponse {
                     .approvedAt(payment.getApprovedAt())
                     .createdAt(payment.getCreatedAt())
                     .updatedAt(payment.getUpdatedAt())
+                    .build();
+        }
+    }
+
+    @Data
+    @Builder
+    public static class PaymentOrderMismatchInfo {
+        private Long orderId;
+        private Long orderUserId;
+        private String orderStatus;
+        private Long paymentId;
+        private String paymentStatus;
+        private BigDecimal paymentAmount;
+        private String mismatchType;
+        private LocalDateTime orderUpdatedAt;
+        private LocalDateTime paymentUpdatedAt;
+
+        public static PaymentOrderMismatchInfo from(PaymentOrderMismatchProjection projection) {
+            return PaymentOrderMismatchInfo.builder()
+                    .orderId(projection.getOrderId())
+                    .orderUserId(projection.getOrderUserId())
+                    .orderStatus(projection.getOrderStatus())
+                    .paymentId(projection.getPaymentId())
+                    .paymentStatus(projection.getPaymentStatus())
+                    .paymentAmount(projection.getPaymentAmount())
+                    .mismatchType(projection.getMismatchType())
+                    .orderUpdatedAt(projection.getOrderUpdatedAt())
+                    .paymentUpdatedAt(projection.getPaymentUpdatedAt())
                     .build();
         }
     }

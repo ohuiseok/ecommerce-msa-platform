@@ -53,6 +53,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/orders/status/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/orders/*/status").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/payments/reconciliation/mismatches").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/payments/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/coupons/my").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/coupons").hasRole("ADMIN")

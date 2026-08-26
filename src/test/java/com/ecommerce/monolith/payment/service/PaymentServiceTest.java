@@ -17,6 +17,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -182,5 +184,94 @@ class PaymentServiceTest {
         PaymentResponse.PaymentInfo result = PaymentResponse.PaymentInfo.from(payment);
 
         assertThat(result.getIdempotencyKey()).isEqualTo("pay-key-1");
+    }
+
+    @Test
+    void getPaymentOrderMismatchesReturnsRepositoryProjection() {
+        LocalDateTime orderUpdatedAt = LocalDateTime.of(2026, 8, 26, 10, 0);
+        LocalDateTime paymentUpdatedAt = LocalDateTime.of(2026, 8, 26, 10, 5);
+
+        when(paymentRepository.findPaymentOrderMismatches()).thenReturn(List.of(new TestMismatchProjection(
+                10L,
+                20L,
+                "PENDING",
+                30L,
+                "COMPLETED",
+                BigDecimal.valueOf(12000),
+                "COMPLETED_PAYMENT_ORDER_NOT_CONFIRMED",
+                orderUpdatedAt,
+                paymentUpdatedAt
+        )));
+
+        List<PaymentResponse.PaymentOrderMismatchInfo> result = paymentService.getPaymentOrderMismatches();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getOrderId()).isEqualTo(10L);
+        assertThat(result.get(0).getOrderUserId()).isEqualTo(20L);
+        assertThat(result.get(0).getOrderStatus()).isEqualTo("PENDING");
+        assertThat(result.get(0).getPaymentId()).isEqualTo(30L);
+        assertThat(result.get(0).getPaymentStatus()).isEqualTo("COMPLETED");
+        assertThat(result.get(0).getPaymentAmount()).isEqualByComparingTo("12000");
+        assertThat(result.get(0).getMismatchType()).isEqualTo("COMPLETED_PAYMENT_ORDER_NOT_CONFIRMED");
+        assertThat(result.get(0).getOrderUpdatedAt()).isEqualTo(orderUpdatedAt);
+        assertThat(result.get(0).getPaymentUpdatedAt()).isEqualTo(paymentUpdatedAt);
+    }
+
+    private record TestMismatchProjection(
+            Long orderId,
+            Long orderUserId,
+            String orderStatus,
+            Long paymentId,
+            String paymentStatus,
+            BigDecimal paymentAmount,
+            String mismatchType,
+            LocalDateTime orderUpdatedAt,
+            LocalDateTime paymentUpdatedAt
+    ) implements com.ecommerce.monolith.payment.repository.PaymentOrderMismatchProjection {
+
+        @Override
+        public Long getOrderId() {
+            return orderId;
+        }
+
+        @Override
+        public Long getOrderUserId() {
+            return orderUserId;
+        }
+
+        @Override
+        public String getOrderStatus() {
+            return orderStatus;
+        }
+
+        @Override
+        public Long getPaymentId() {
+            return paymentId;
+        }
+
+        @Override
+        public String getPaymentStatus() {
+            return paymentStatus;
+        }
+
+        @Override
+        public BigDecimal getPaymentAmount() {
+            return paymentAmount;
+        }
+
+        @Override
+        public String getMismatchType() {
+            return mismatchType;
+        }
+
+        @Override
+        public LocalDateTime getOrderUpdatedAt() {
+            return orderUpdatedAt;
+        }
+
+        @Override
+        public LocalDateTime getPaymentUpdatedAt() {
+            return paymentUpdatedAt;
+        }
     }
 }

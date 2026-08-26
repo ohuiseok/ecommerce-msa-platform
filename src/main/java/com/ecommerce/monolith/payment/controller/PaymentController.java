@@ -13,6 +13,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/payments")
 @RequiredArgsConstructor
@@ -50,6 +52,11 @@ public class PaymentController {
         validateSelfOrAdmin(order.getUserId(), authentication);
 
         return ResponseEntity.ok(paymentService.getPaymentByOrderId(orderId));
+    }
+
+    @GetMapping("/reconciliation/mismatches")
+    public ResponseEntity<List<PaymentResponse.PaymentOrderMismatchInfo>> getPaymentOrderMismatches() {
+        return ResponseEntity.ok(paymentService.getPaymentOrderMismatches());
     }
 
     @DeleteMapping("/{paymentId}")

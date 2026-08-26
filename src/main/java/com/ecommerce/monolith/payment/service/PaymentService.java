@@ -14,6 +14,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -87,6 +90,13 @@ public class PaymentService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.PAYMENT_NOT_FOUND));
 
         return PaymentResponse.PaymentInfo.from(payment);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PaymentResponse.PaymentOrderMismatchInfo> getPaymentOrderMismatches() {
+        return paymentRepository.findPaymentOrderMismatches().stream()
+                .map(PaymentResponse.PaymentOrderMismatchInfo::from)
+                .collect(Collectors.toList());
     }
 
     public PaymentResponse.PaymentInfo cancelPayment(Long paymentId) {
