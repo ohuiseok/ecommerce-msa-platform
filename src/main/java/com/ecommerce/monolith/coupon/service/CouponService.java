@@ -43,7 +43,7 @@ public class CouponService {
                 .build();
 
         Coupon savedCoupon = couponRepository.save(coupon);
-        log.info("Coupon created: code={}", savedCoupon.getCode());
+        log.info("event=coupon.created couponId={} couponCode={}", savedCoupon.getCouponId(), savedCoupon.getCode());
 
         return CouponResponse.CouponInfo.from(savedCoupon);
     }
@@ -87,7 +87,8 @@ public class CouponService {
                 .build();
 
         UserCoupon savedUserCoupon = userCouponRepository.save(userCoupon);
-        log.info("Coupon issued: userId={}, couponCode={}", userId, coupon.getCode());
+        log.info("event=coupon.issued userId={} couponId={} userCouponId={} couponCode={}",
+                userId, coupon.getCouponId(), savedUserCoupon.getUserCouponId(), coupon.getCode());
 
         return CouponResponse.UserCouponInfo.from(savedUserCoupon);
     }
@@ -125,6 +126,7 @@ public class CouponService {
             }
             throw new BusinessException(ErrorCode.COUPON_ALREADY_USED);
         }
+        log.info("event=coupon.used userCouponId={} orderId={}", userCouponId, orderId);
     }
 
     public void restoreCoupon(Long userCouponId) {
@@ -134,7 +136,7 @@ public class CouponService {
         userCoupon.restore();
         userCouponRepository.save(userCoupon);
 
-        log.info("Coupon restored after order cancellation: userCouponId={}", userCouponId);
+        log.info("event=coupon.restored userCouponId={} userId={}", userCouponId, userCoupon.getUserId());
     }
 
     private UserCoupon getOwnedUserCoupon(Long userId, Long userCouponId) {

@@ -38,6 +38,8 @@ management:
       show-details: always
 
 logging:
+  pattern:
+    level: "%5p traceId=[%X{traceId}]"
   level:
     root: INFO
     com.ecommerce.monolith: DEBUG

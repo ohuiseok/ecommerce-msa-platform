@@ -61,7 +61,7 @@ public class OrderService {
         Order savedOrder = orderRepository.save(order);
         markCouponUsedIfPresent(request.getUserCouponId(), savedOrder.getOrderId());
 
-        log.info("Order created successfully: orderId={}, userId={}, totalAmount={}",
+        log.info("event=order.created orderId={} userId={} totalAmount={}",
                 savedOrder.getOrderId(), savedOrder.getUserId(), savedOrder.getTotalAmount());
 
         return OrderResponse.OrderInfo.from(savedOrder);
@@ -92,7 +92,7 @@ public class OrderService {
         markCouponUsedIfPresent(request.getUserCouponId(), savedOrder.getOrderId());
         cartService.clearCart(userId);
 
-        log.info("Order created from cart: orderId={}, userId={}, totalAmount={}",
+        log.info("event=order.created_from_cart orderId={} userId={} totalAmount={}",
                 savedOrder.getOrderId(), savedOrder.getUserId(), savedOrder.getTotalAmount());
 
         return OrderResponse.OrderInfo.from(savedOrder);
@@ -181,7 +181,7 @@ public class OrderService {
         order.updateStatus(newStatus);
         Order updatedOrder = orderRepository.save(order);
 
-        log.info("Order status updated: orderId={}, status={}", orderId, newStatus);
+        log.info("event=order.status_updated orderId={} status={}", orderId, newStatus);
 
         return OrderResponse.OrderInfo.from(updatedOrder);
     }
@@ -207,7 +207,7 @@ public class OrderService {
             couponService.restoreCoupon(order.getUserCouponId());
         }
 
-        log.info("Order cancelled successfully: orderId={}", orderId);
+        log.info("event=order.cancelled orderId={} userId={}", orderId, order.getUserId());
     }
 
     @Transactional
@@ -218,6 +218,6 @@ public class OrderService {
         order.updateStatus(Order.OrderStatus.CONFIRMED);
         orderRepository.save(order);
 
-        log.info("Order confirmed after payment: orderId={}", orderId);
+        log.info("event=order.confirmed orderId={} userId={}", orderId, order.getUserId());
     }
 }

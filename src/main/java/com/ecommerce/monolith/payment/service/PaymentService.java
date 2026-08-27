@@ -33,8 +33,8 @@ public class PaymentService {
 
         return paymentRepository.findByOrderIdAndIdempotencyKey(order.getOrderId(), idempotencyKey)
                 .map(payment -> {
-                    log.info("Idempotent payment retry returned existing result: orderId={}, paymentId={}",
-                            order.getOrderId(), payment.getPaymentId());
+                    log.info("event=payment.idempotent_retry orderId={} paymentId={} userId={} status={}",
+                            order.getOrderId(), payment.getPaymentId(), payment.getUserId(), payment.getStatus());
                     return PaymentResponse.PaymentInfo.from(payment);
                 })
                 .orElseGet(() -> createPayment(request, order, idempotencyKey));
@@ -68,9 +68,11 @@ public class PaymentService {
 
         if (savedPayment.getStatus() == Payment.PaymentStatus.COMPLETED) {
             orderService.markOrderConfirmed(order.getOrderId());
-            log.info("Payment completed: orderId={}, paymentId={}", order.getOrderId(), savedPayment.getPaymentId());
+            log.info("event=payment.completed orderId={} paymentId={} userId={} amount={}",
+                    order.getOrderId(), savedPayment.getPaymentId(), savedPayment.getUserId(), savedPayment.getAmount());
         } else {
-            log.warn("Payment failed: orderId={}, reason={}", order.getOrderId(), savedPayment.getFailureReason());
+            log.warn("event=payment.failed orderId={} paymentId={} userId={} reason={}",
+                    order.getOrderId(), savedPayment.getPaymentId(), savedPayment.getUserId(), savedPayment.getFailureReason());
         }
 
         return PaymentResponse.PaymentInfo.from(savedPayment);
@@ -110,7 +112,8 @@ public class PaymentService {
         payment.cancel();
         Payment savedPayment = paymentRepository.save(payment);
 
-        log.info("Payment cancelled: paymentId={}", paymentId);
+        log.info("event=payment.cancelled orderId={} paymentId={} userId={}",
+                savedPayment.getOrderId(), savedPayment.getPaymentId(), savedPayment.getUserId());
 
         return PaymentResponse.PaymentInfo.from(savedPayment);
     }
