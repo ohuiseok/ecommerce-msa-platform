@@ -30,6 +30,7 @@ public class PaymentService {
     public PaymentResponse.PaymentInfo requestPayment(PaymentRequest.Create request) {
         OrderResponse.OrderInfo order = orderService.getOrder(request.getOrderId());
         String idempotencyKey = request.getIdempotencyKey().trim();
+        paymentRepository.lockIdempotencyKey(order.getOrderId() + ":" + idempotencyKey);
 
         return paymentRepository.findByOrderIdAndIdempotencyKey(order.getOrderId(), idempotencyKey)
                 .map(payment -> {

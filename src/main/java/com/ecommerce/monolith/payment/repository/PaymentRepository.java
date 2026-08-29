@@ -3,6 +3,7 @@ package com.ecommerce.monolith.payment.repository;
 import com.ecommerce.monolith.payment.entity.Payment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -13,9 +14,14 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     Optional<Payment> findByOrderId(Long orderId);
 
+    List<Payment> findAllByOrderId(Long orderId);
+
     Optional<Payment> findByOrderIdAndIdempotencyKey(Long orderId, String idempotencyKey);
 
     boolean existsByOrderIdAndStatus(Long orderId, Payment.PaymentStatus status);
+
+    @Query(value = "SELECT 1 FROM pg_advisory_xact_lock(hashtext(:lockKey))", nativeQuery = true)
+    Integer lockIdempotencyKey(@Param("lockKey") String lockKey);
 
     @Query(value = """
             SELECT
