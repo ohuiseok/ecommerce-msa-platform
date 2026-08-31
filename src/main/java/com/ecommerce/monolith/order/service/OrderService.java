@@ -193,6 +193,35 @@ public class OrderService {
         order.cancelByUser();
         orderRepository.save(order);
 
+        restoreOrderResources(order);
+
+        log.info("event=order.cancelled orderId={} userId={}", orderId, order.getUserId());
+    }
+
+    public void cancelPendingOrderAfterPaymentFailure(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (order.getStatus() == Order.OrderStatus.CANCELLED) {
+            log.info("event=order.payment_failure_recovery_skipped orderId={} userId={} status={}",
+                    orderId, order.getUserId(), order.getStatus());
+            return;
+        }
+
+        if (order.getStatus() != Order.OrderStatus.PENDING) {
+            log.warn("event=order.payment_failure_recovery_skipped orderId={} userId={} status={}",
+                    orderId, order.getUserId(), order.getStatus());
+            return;
+        }
+
+        order.updateStatus(Order.OrderStatus.CANCELLED);
+        orderRepository.save(order);
+        restoreOrderResources(order);
+
+        log.info("event=order.payment_failure_recovered orderId={} userId={}", orderId, order.getUserId());
+    }
+
+    private void restoreOrderResources(Order order) {
         // 재고 복원
         for (OrderItem orderItem : order.getOrderItems()) {
             ProductRequest.StockUpdate request = new ProductRequest.StockUpdate();
@@ -206,8 +235,6 @@ public class OrderService {
         if (order.getUserCouponId() != null) {
             couponService.restoreCoupon(order.getUserCouponId());
         }
-
-        log.info("event=order.cancelled orderId={} userId={}", orderId, order.getUserId());
     }
 
     @Transactional

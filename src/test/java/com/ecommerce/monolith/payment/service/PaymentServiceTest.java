@@ -76,7 +76,7 @@ class PaymentServiceTest {
     }
 
     @Test
-    void requestPaymentKeepsOrderPendingWhenChargeFails() {
+    void requestPaymentCancelsPendingOrderWhenChargeFails() {
         PaymentRequest.Create request = new PaymentRequest.Create();
         request.setOrderId(1L);
         request.setMethod(Payment.PaymentMethod.CARD);
@@ -100,6 +100,32 @@ class PaymentServiceTest {
         assertThat(result.getStatus()).isEqualTo(Payment.PaymentStatus.FAILED);
         assertThat(result.getFailureReason()).isEqualTo("카드 승인이 거절되었습니다");
         verify(orderService, never()).markOrderConfirmed(any());
+        verify(orderService).cancelPendingOrderAfterPaymentFailure(1L);
+    }
+
+    @Test
+    void requestPaymentRejectsCancelledOrderBeforePgCall() {
+        PaymentRequest.Create request = new PaymentRequest.Create();
+        request.setOrderId(1L);
+        request.setMethod(Payment.PaymentMethod.CARD);
+        request.setCardNumber("1234567890123452");
+        request.setIdempotencyKey("pay-key-cancelled");
+
+        when(orderService.getOrder(1L)).thenReturn(OrderResponse.OrderInfo.builder()
+                .orderId(1L)
+                .userId(1L)
+                .totalAmount(BigDecimal.valueOf(2000))
+                .status(Order.OrderStatus.CANCELLED)
+                .build());
+        when(paymentRepository.findByOrderIdAndIdempotencyKey(1L, "pay-key-cancelled")).thenReturn(Optional.empty());
+        when(paymentRepository.existsByOrderIdAndStatus(1L, Payment.PaymentStatus.COMPLETED)).thenReturn(false);
+
+        assertThatThrownBy(() -> paymentService.requestPayment(request))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_ORDER_STATUS);
+
+        verify(mockPgClient, never()).charge(any(), any(), any());
+        verify(paymentRepository, never()).save(any());
     }
 
     @Test

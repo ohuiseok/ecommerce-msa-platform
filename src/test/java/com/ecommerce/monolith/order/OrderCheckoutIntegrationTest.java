@@ -70,7 +70,7 @@ class OrderCheckoutIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void checkoutFromCartThenFailedPaymentLeavesOrderPending() throws Exception {
+    void checkoutFromCartThenFailedPaymentCancelsOrderAndRestoresStock() throws Exception {
         String userToken = registerAndLogin("buyer2@example.com");
         String adminToken = login("admin@test.com", "admin1234");
 
@@ -84,7 +84,19 @@ class OrderCheckoutIntegrationTest extends AbstractIntegrationTest {
         mockMvc.perform(get("/api/orders/{orderId}", orderId)
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PENDING"));
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        mockMvc.perform(get("/api/products/{productId}/stock", productId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stockQuantity").value(3));
+
+        mockMvc.perform(post("/api/payments")
+                        .header("Authorization", "Bearer " + userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"orderId": %d, "method": "CARD", "idempotencyKey": "retry-after-failure-%d", "cardNumber": "4111111111111112"}
+                                """.formatted(orderId, orderId)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

@@ -2,10 +2,13 @@ package com.ecommerce.monolith.order.service;
 
 import com.ecommerce.monolith.common.exception.BusinessException;
 import com.ecommerce.monolith.common.exception.ErrorCode;
+import com.ecommerce.monolith.coupon.service.CouponService;
 import com.ecommerce.monolith.order.dto.OrderRequest;
 import com.ecommerce.monolith.order.dto.OrderResponse;
 import com.ecommerce.monolith.order.entity.Order;
+import com.ecommerce.monolith.order.entity.OrderItem;
 import com.ecommerce.monolith.order.repository.OrderRepository;
+import com.ecommerce.monolith.product.dto.ProductRequest;
 import com.ecommerce.monolith.product.dto.ProductResponse;
 import com.ecommerce.monolith.product.entity.Product;
 import com.ecommerce.monolith.product.service.ProductService;
@@ -26,6 +29,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,6 +45,9 @@ class OrderServiceTest {
 
     @Mock
     private ProductService productService;
+
+    @Mock
+    private CouponService couponService;
 
     @InjectMocks
     private OrderService orderService;
@@ -132,6 +139,46 @@ class OrderServiceTest {
         verify(orderRepository, never()).save(any(Order.class));
     }
 
+    @Test
+    void cancelPendingOrderAfterPaymentFailureCancelsOrderAndRestoresResources() {
+        Order order = orderWithStatus(Order.OrderStatus.PENDING);
+        order.setUserCouponId(20L);
+        order.addOrderItem(OrderItem.builder()
+                .productId(10L)
+                .productName("Phone")
+                .price(BigDecimal.valueOf(1000))
+                .quantity(2)
+                .build());
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        orderService.cancelPendingOrderAfterPaymentFailure(1L);
+
+        assertThat(order.getStatus()).isEqualTo(Order.OrderStatus.CANCELLED);
+        verify(productService).updateStock(eq(10L), stockUpdate(ProductRequest.Operation.INCREASE, 2));
+        verify(couponService).restoreCoupon(20L);
+    }
+
+    @Test
+    void cancelPendingOrderAfterPaymentFailureDoesNotRestoreAlreadyCancelledOrderAgain() {
+        Order order = orderWithStatus(Order.OrderStatus.CANCELLED);
+        order.addOrderItem(OrderItem.builder()
+                .productId(10L)
+                .productName("Phone")
+                .price(BigDecimal.valueOf(1000))
+                .quantity(2)
+                .build());
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        orderService.cancelPendingOrderAfterPaymentFailure(1L);
+
+        verify(orderRepository, never()).save(any(Order.class));
+        verify(productService, never()).updateStock(any(), any());
+        verify(couponService, never()).restoreCoupon(any());
+    }
+
     private OrderRequest.OrderItemRequest orderItemRequest() {
         OrderRequest.OrderItemRequest request = new OrderRequest.OrderItemRequest();
         request.setProductId(10L);
@@ -146,6 +193,12 @@ class OrderServiceTest {
         request.setRecipientName("User");
         request.setRecipientPhone("010-1234-5678");
         return request;
+    }
+
+    private ProductRequest.StockUpdate stockUpdate(ProductRequest.Operation operation, int quantity) {
+        return org.mockito.ArgumentMatchers.argThat(request ->
+                request.getOperation() == operation && request.getQuantity() == quantity
+        );
     }
 
     private Order orderWithStatus(Order.OrderStatus status) {

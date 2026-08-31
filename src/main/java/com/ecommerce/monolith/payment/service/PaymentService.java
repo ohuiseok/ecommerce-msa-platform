@@ -3,6 +3,7 @@ package com.ecommerce.monolith.payment.service;
 import com.ecommerce.monolith.common.exception.BusinessException;
 import com.ecommerce.monolith.common.exception.ErrorCode;
 import com.ecommerce.monolith.order.dto.OrderResponse;
+import com.ecommerce.monolith.order.entity.Order;
 import com.ecommerce.monolith.order.service.OrderService;
 import com.ecommerce.monolith.payment.client.MockPgClient;
 import com.ecommerce.monolith.payment.dto.PaymentRequest;
@@ -50,6 +51,13 @@ public class PaymentService {
             throw new BusinessException(ErrorCode.PAYMENT_ALREADY_PROCESSED);
         }
 
+        if (order.getStatus() != Order.OrderStatus.PENDING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_ORDER_STATUS,
+                    "결제 대기 상태의 주문만 결제할 수 있습니다: " + order.getStatus()
+            );
+        }
+
         Payment payment = Payment.builder()
                 .orderId(order.getOrderId())
                 .userId(order.getUserId())
@@ -72,6 +80,7 @@ public class PaymentService {
             log.info("event=payment.completed orderId={} paymentId={} userId={} amount={}",
                     order.getOrderId(), savedPayment.getPaymentId(), savedPayment.getUserId(), savedPayment.getAmount());
         } else {
+            orderService.cancelPendingOrderAfterPaymentFailure(order.getOrderId());
             log.warn("event=payment.failed orderId={} paymentId={} userId={} reason={}",
                     order.getOrderId(), savedPayment.getPaymentId(), savedPayment.getUserId(), savedPayment.getFailureReason());
         }
