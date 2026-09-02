@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -177,6 +178,41 @@ class OrderServiceTest {
         verify(orderRepository, never()).save(any(Order.class));
         verify(productService, never()).updateStock(any(), any());
         verify(couponService, never()).restoreCoupon(any());
+    }
+
+    @Test
+    void expirePendingOrdersCancelsExpiredOrdersAndRestoresResources() {
+        LocalDateTime cutoff = LocalDateTime.of(2026, 9, 2, 10, 0);
+        Order order = orderWithStatus(Order.OrderStatus.PENDING);
+        order.setUserCouponId(20L);
+        order.addOrderItem(OrderItem.builder()
+                .productId(10L)
+                .productName("Phone")
+                .price(BigDecimal.valueOf(1000))
+                .quantity(2)
+                .build());
+
+        when(orderRepository.findByStatusAndCreatedAtLessThanEqual(
+                eq(Order.OrderStatus.PENDING),
+                eq(cutoff),
+                any()
+        )).thenReturn(List.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        int expiredCount = orderService.expirePendingOrders(cutoff, 100);
+
+        assertThat(expiredCount).isEqualTo(1);
+        assertThat(order.getStatus()).isEqualTo(Order.OrderStatus.CANCELLED);
+        verify(productService).updateStock(eq(10L), stockUpdate(ProductRequest.Operation.INCREASE, 2));
+        verify(couponService).restoreCoupon(20L);
+    }
+
+    @Test
+    void expirePendingOrdersRejectsNonPositiveBatchSize() {
+        assertThatThrownBy(() -> orderService.expirePendingOrders(LocalDateTime.now(), 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("batchSize must be positive");
+        verify(orderRepository, never()).findByStatusAndCreatedAtLessThanEqual(any(), any(), any());
     }
 
     private OrderRequest.OrderItemRequest orderItemRequest() {

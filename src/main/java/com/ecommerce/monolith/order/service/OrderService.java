@@ -19,11 +19,14 @@ import com.ecommerce.monolith.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -219,6 +222,42 @@ public class OrderService {
         restoreOrderResources(order);
 
         log.info("event=order.payment_failure_recovered orderId={} userId={}", orderId, order.getUserId());
+    }
+
+    public int expirePendingOrders(LocalDateTime cutoff, int batchSize) {
+        if (batchSize <= 0) {
+            throw new IllegalArgumentException("batchSize must be positive");
+        }
+
+        List<Order> expiredOrders = orderRepository.findByStatusAndCreatedAtLessThanEqual(
+                Order.OrderStatus.PENDING,
+                cutoff,
+                PageRequest.of(0, batchSize)
+        );
+
+        int expiredCount = 0;
+        for (Order order : expiredOrders) {
+            if (expirePendingOrder(order)) {
+                expiredCount++;
+            }
+        }
+
+        return expiredCount;
+    }
+
+    private boolean expirePendingOrder(Order order) {
+        if (order.getStatus() != Order.OrderStatus.PENDING) {
+            log.info("event=order.expiration_skipped orderId={} userId={} status={}",
+                    order.getOrderId(), order.getUserId(), order.getStatus());
+            return false;
+        }
+
+        order.updateStatus(Order.OrderStatus.CANCELLED);
+        orderRepository.save(order);
+        restoreOrderResources(order);
+
+        log.info("event=order.expired orderId={} userId={}", order.getOrderId(), order.getUserId());
+        return true;
     }
 
     private void restoreOrderResources(Order order) {

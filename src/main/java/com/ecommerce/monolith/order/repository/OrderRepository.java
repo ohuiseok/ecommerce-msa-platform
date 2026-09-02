@@ -1,9 +1,12 @@
 package com.ecommerce.monolith.order.repository;
 
 import com.ecommerce.monolith.order.entity.Order;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -28,4 +31,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     
     @Query("SELECT COUNT(o) FROM Order o WHERE o.userId = :userId AND o.status = :status")
     Long countByUserIdAndStatus(@Param("userId") Long userId, @Param("status") Order.OrderStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = "orderItems")
+    List<Order> findByStatusAndCreatedAtLessThanEqual(
+            Order.OrderStatus status,
+            LocalDateTime cutoff,
+            Pageable pageable
+    );
 }

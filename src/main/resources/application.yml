@@ -27,6 +27,12 @@ app:
     email: ${ADMIN_EMAIL:}
     password: ${ADMIN_PASSWORD:}
     name: ${ADMIN_NAME:Administrator}
+  order:
+    pending-expiration:
+      expiration-minutes: ${ORDER_PENDING_EXPIRATION_MINUTES:30}
+      fixed-delay-ms: ${ORDER_PENDING_EXPIRATION_FIXED_DELAY_MS:60000}
+      initial-delay-ms: ${ORDER_PENDING_EXPIRATION_INITIAL_DELAY_MS:60000}
+      batch-size: ${ORDER_PENDING_EXPIRATION_BATCH_SIZE:100}
 
 management:
   endpoints:
