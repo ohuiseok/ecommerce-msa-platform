@@ -1,6 +1,7 @@
 package com.ecommerce.monolith.payment.dto;
 
 import com.ecommerce.monolith.payment.entity.Payment;
+import com.ecommerce.monolith.payment.entity.PaymentReconciliationTask;
 import com.ecommerce.monolith.payment.repository.PaymentOrderMismatchProjection;
 import lombok.Builder;
 import lombok.Data;
@@ -68,6 +69,42 @@ public class PaymentResponse {
                     .mismatchType(projection.getMismatchType())
                     .orderUpdatedAt(projection.getOrderUpdatedAt())
                     .paymentUpdatedAt(projection.getPaymentUpdatedAt())
+                    .build();
+        }
+    }
+
+    @Data
+    @Builder
+    public static class PaymentReconciliationTaskInfo {
+        private Long taskId;
+        private PaymentReconciliationTask.ReconciliationType type;
+        private PaymentReconciliationTask.ReconciliationStatus status;
+        private Long orderId;
+        private Long userId;
+        private String pgEventId;
+        private String pgDeliveryId;
+        private String pgTransactionId;
+        private BigDecimal amount;
+        private String reason;
+        private LocalDateTime pgOccurredAt;
+        private LocalDateTime createdAt;
+        private LocalDateTime updatedAt;
+
+        public static PaymentReconciliationTaskInfo from(PaymentReconciliationTask task) {
+            return PaymentReconciliationTaskInfo.builder()
+                    .taskId(task.getTaskId())
+                    .type(task.getType())
+                    .status(task.getStatus())
+                    .orderId(task.getOrderId())
+                    .userId(task.getUserId())
+                    .pgEventId(task.getPgEventId())
+                    .pgDeliveryId(task.getPgDeliveryId())
+                    .pgTransactionId(task.getPgTransactionId())
+                    .amount(task.getAmount())
+                    .reason(task.getReason())
+                    .pgOccurredAt(task.getPgOccurredAt())
+                    .createdAt(task.getCreatedAt())
+                    .updatedAt(task.getUpdatedAt())
                     .build();
         }
     }

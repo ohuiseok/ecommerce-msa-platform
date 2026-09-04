@@ -9,13 +9,16 @@ import com.ecommerce.monolith.payment.client.MockPgClient;
 import com.ecommerce.monolith.payment.dto.PaymentRequest;
 import com.ecommerce.monolith.payment.dto.PaymentResponse;
 import com.ecommerce.monolith.payment.entity.Payment;
+import com.ecommerce.monolith.payment.entity.PaymentReconciliationTask;
 import com.ecommerce.monolith.payment.repository.PaymentRepository;
+import com.ecommerce.monolith.payment.repository.PaymentReconciliationTaskRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -25,6 +28,7 @@ import java.util.stream.Collectors;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final PaymentReconciliationTaskRepository reconciliationTaskRepository;
     private final OrderService orderService;
     private final MockPgClient mockPgClient;
 
@@ -108,6 +112,46 @@ public class PaymentService {
     public List<PaymentResponse.PaymentOrderMismatchInfo> getPaymentOrderMismatches() {
         return paymentRepository.findPaymentOrderMismatches().stream()
                 .map(PaymentResponse.PaymentOrderMismatchInfo::from)
+                .collect(Collectors.toList());
+    }
+
+    public Optional<PaymentResponse.PaymentReconciliationTaskInfo> registerLateApprovedPaymentForReconciliation(
+            MockPgClient.PgEvent event
+    ) {
+        if (event.type() != MockPgClient.PgEventType.PAYMENT_APPROVED) {
+            return Optional.empty();
+        }
+
+        OrderResponse.OrderInfo order = orderService.getOrder(event.orderId());
+        if (order.getStatus() != Order.OrderStatus.CANCELLED) {
+            return Optional.empty();
+        }
+
+        PaymentReconciliationTask task = reconciliationTaskRepository.findByPgEventId(event.eventId())
+                .orElseGet(() -> reconciliationTaskRepository.save(PaymentReconciliationTask.builder()
+                        .type(PaymentReconciliationTask.ReconciliationType.LATE_PAYMENT_APPROVED_AFTER_ORDER_CANCELLED)
+                        .orderId(order.getOrderId())
+                        .userId(order.getUserId())
+                        .pgEventId(event.eventId())
+                        .pgDeliveryId(event.deliveryId())
+                        .pgTransactionId(event.transactionId())
+                        .amount(event.amount())
+                        .reason("취소된 주문에 늦은 결제 승인 이벤트가 도착했습니다. PG 환불 또는 수동 보정이 필요합니다.")
+                        .pgOccurredAt(event.occurredAt())
+                        .build()));
+
+        log.warn("event=payment.reconciliation_task_registered orderId={} userId={} pgEventId={} pgTransactionId={} amount={} taskId={}",
+                task.getOrderId(), task.getUserId(), task.getPgEventId(), task.getPgTransactionId(), task.getAmount(), task.getTaskId());
+
+        return Optional.of(PaymentResponse.PaymentReconciliationTaskInfo.from(task));
+    }
+
+    @Transactional(readOnly = true)
+    public List<PaymentResponse.PaymentReconciliationTaskInfo> getOpenPaymentReconciliationTasks() {
+        return reconciliationTaskRepository
+                .findByStatusOrderByCreatedAtDesc(PaymentReconciliationTask.ReconciliationStatus.OPEN)
+                .stream()
+                .map(PaymentResponse.PaymentReconciliationTaskInfo::from)
                 .collect(Collectors.toList());
     }
 

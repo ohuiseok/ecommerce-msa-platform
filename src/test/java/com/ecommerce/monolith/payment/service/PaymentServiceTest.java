@@ -9,7 +9,9 @@ import com.ecommerce.monolith.payment.client.MockPgClient;
 import com.ecommerce.monolith.payment.dto.PaymentRequest;
 import com.ecommerce.monolith.payment.dto.PaymentResponse;
 import com.ecommerce.monolith.payment.entity.Payment;
+import com.ecommerce.monolith.payment.entity.PaymentReconciliationTask;
 import com.ecommerce.monolith.payment.repository.PaymentRepository;
+import com.ecommerce.monolith.payment.repository.PaymentReconciliationTaskRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -33,6 +35,9 @@ class PaymentServiceTest {
 
     @Mock
     private PaymentRepository paymentRepository;
+
+    @Mock
+    private PaymentReconciliationTaskRepository reconciliationTaskRepository;
 
     @Mock
     private OrderService orderService;
@@ -241,6 +246,134 @@ class PaymentServiceTest {
         assertThat(result.get(0).getMismatchType()).isEqualTo("COMPLETED_PAYMENT_ORDER_NOT_CONFIRMED");
         assertThat(result.get(0).getOrderUpdatedAt()).isEqualTo(orderUpdatedAt);
         assertThat(result.get(0).getPaymentUpdatedAt()).isEqualTo(paymentUpdatedAt);
+    }
+
+    @Test
+    void registerLateApprovedPaymentForReconciliationCreatesOpenTaskForCancelledOrder() {
+        LocalDateTime occurredAt = LocalDateTime.of(2026, 9, 3, 12, 30);
+        MockPgClient.PgEvent event = new MockPgClient.PgEvent(
+                "MOCK-EVENT-LATE-1",
+                "MOCK-DELIVERY-1",
+                MockPgClient.PgEventType.PAYMENT_APPROVED,
+                1L,
+                "MOCK-TX-LATE-1",
+                BigDecimal.valueOf(12000),
+                null,
+                occurredAt
+        );
+
+        when(orderService.getOrder(1L)).thenReturn(OrderResponse.OrderInfo.builder()
+                .orderId(1L)
+                .userId(10L)
+                .totalAmount(BigDecimal.valueOf(12000))
+                .status(Order.OrderStatus.CANCELLED)
+                .build());
+        when(reconciliationTaskRepository.findByPgEventId("MOCK-EVENT-LATE-1")).thenReturn(Optional.empty());
+        when(reconciliationTaskRepository.save(any(PaymentReconciliationTask.class))).thenAnswer(invocation -> {
+            PaymentReconciliationTask task = invocation.getArgument(0);
+            task.setTaskId(100L);
+            return task;
+        });
+
+        Optional<PaymentResponse.PaymentReconciliationTaskInfo> result =
+                paymentService.registerLateApprovedPaymentForReconciliation(event);
+
+        assertThat(result).isPresent();
+        PaymentResponse.PaymentReconciliationTaskInfo task = result.get();
+        assertThat(task.getTaskId()).isEqualTo(100L);
+        assertThat(task.getType()).isEqualTo(
+                PaymentReconciliationTask.ReconciliationType.LATE_PAYMENT_APPROVED_AFTER_ORDER_CANCELLED
+        );
+        assertThat(task.getStatus()).isEqualTo(PaymentReconciliationTask.ReconciliationStatus.OPEN);
+        assertThat(task.getOrderId()).isEqualTo(1L);
+        assertThat(task.getUserId()).isEqualTo(10L);
+        assertThat(task.getPgEventId()).isEqualTo("MOCK-EVENT-LATE-1");
+        assertThat(task.getPgDeliveryId()).isEqualTo("MOCK-DELIVERY-1");
+        assertThat(task.getPgTransactionId()).isEqualTo("MOCK-TX-LATE-1");
+        assertThat(task.getAmount()).isEqualByComparingTo("12000");
+        assertThat(task.getReason()).contains("늦은 결제 승인");
+        assertThat(task.getPgOccurredAt()).isEqualTo(occurredAt);
+    }
+
+    @Test
+    void registerLateApprovedPaymentForReconciliationReturnsExistingTaskForSamePgEvent() {
+        MockPgClient.PgEvent event = MockPgClient.PgEvent.approved(1L, "MOCK-TX-LATE-1", BigDecimal.valueOf(12000));
+        PaymentReconciliationTask existing = PaymentReconciliationTask.builder()
+                .taskId(100L)
+                .type(PaymentReconciliationTask.ReconciliationType.LATE_PAYMENT_APPROVED_AFTER_ORDER_CANCELLED)
+                .status(PaymentReconciliationTask.ReconciliationStatus.OPEN)
+                .orderId(1L)
+                .userId(10L)
+                .pgEventId(event.eventId())
+                .pgDeliveryId("MOCK-DELIVERY-FIRST")
+                .pgTransactionId(event.transactionId())
+                .amount(event.amount())
+                .reason("취소된 주문에 늦은 결제 승인 이벤트가 도착했습니다. PG 환불 또는 수동 보정이 필요합니다.")
+                .pgOccurredAt(event.occurredAt())
+                .build();
+
+        when(orderService.getOrder(1L)).thenReturn(OrderResponse.OrderInfo.builder()
+                .orderId(1L)
+                .userId(10L)
+                .totalAmount(BigDecimal.valueOf(12000))
+                .status(Order.OrderStatus.CANCELLED)
+                .build());
+        when(reconciliationTaskRepository.findByPgEventId(event.eventId())).thenReturn(Optional.of(existing));
+
+        Optional<PaymentResponse.PaymentReconciliationTaskInfo> result =
+                paymentService.registerLateApprovedPaymentForReconciliation(event.redelivered());
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getTaskId()).isEqualTo(100L);
+        assertThat(result.get().getPgDeliveryId()).isEqualTo("MOCK-DELIVERY-FIRST");
+        verify(reconciliationTaskRepository, never()).save(any());
+    }
+
+    @Test
+    void registerLateApprovedPaymentForReconciliationIgnoresNonCancelledOrder() {
+        MockPgClient.PgEvent event = MockPgClient.PgEvent.approved(1L, "MOCK-TX-1", BigDecimal.valueOf(12000));
+
+        when(orderService.getOrder(1L)).thenReturn(OrderResponse.OrderInfo.builder()
+                .orderId(1L)
+                .userId(10L)
+                .totalAmount(BigDecimal.valueOf(12000))
+                .status(Order.OrderStatus.CONFIRMED)
+                .build());
+
+        Optional<PaymentResponse.PaymentReconciliationTaskInfo> result =
+                paymentService.registerLateApprovedPaymentForReconciliation(event);
+
+        assertThat(result).isEmpty();
+        verify(reconciliationTaskRepository, never()).findByPgEventId(any());
+        verify(reconciliationTaskRepository, never()).save(any());
+    }
+
+    @Test
+    void getOpenPaymentReconciliationTasksReturnsOpenTasks() {
+        PaymentReconciliationTask existing = PaymentReconciliationTask.builder()
+                .taskId(100L)
+                .type(PaymentReconciliationTask.ReconciliationType.LATE_PAYMENT_APPROVED_AFTER_ORDER_CANCELLED)
+                .status(PaymentReconciliationTask.ReconciliationStatus.OPEN)
+                .orderId(1L)
+                .userId(10L)
+                .pgEventId("MOCK-EVENT-LATE-1")
+                .pgDeliveryId("MOCK-DELIVERY-1")
+                .pgTransactionId("MOCK-TX-LATE-1")
+                .amount(BigDecimal.valueOf(12000))
+                .reason("취소된 주문에 늦은 결제 승인 이벤트가 도착했습니다. PG 환불 또는 수동 보정이 필요합니다.")
+                .pgOccurredAt(LocalDateTime.of(2026, 9, 3, 12, 30))
+                .build();
+
+        when(reconciliationTaskRepository.findByStatusOrderByCreatedAtDesc(
+                PaymentReconciliationTask.ReconciliationStatus.OPEN
+        )).thenReturn(List.of(existing));
+
+        List<PaymentResponse.PaymentReconciliationTaskInfo> result =
+                paymentService.getOpenPaymentReconciliationTasks();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getTaskId()).isEqualTo(100L);
+        assertThat(result.get(0).getStatus()).isEqualTo(PaymentReconciliationTask.ReconciliationStatus.OPEN);
     }
 
     private record TestMismatchProjection(

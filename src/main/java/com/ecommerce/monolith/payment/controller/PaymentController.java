@@ -59,6 +59,11 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getPaymentOrderMismatches());
     }
 
+    @GetMapping("/reconciliation/tasks")
+    public ResponseEntity<List<PaymentResponse.PaymentReconciliationTaskInfo>> getOpenPaymentReconciliationTasks() {
+        return ResponseEntity.ok(paymentService.getOpenPaymentReconciliationTasks());
+    }
+
     @DeleteMapping("/{paymentId}")
     public ResponseEntity<PaymentResponse.PaymentInfo> cancelPayment(@PathVariable Long paymentId) {
         return ResponseEntity.ok(paymentService.cancelPayment(paymentId));
