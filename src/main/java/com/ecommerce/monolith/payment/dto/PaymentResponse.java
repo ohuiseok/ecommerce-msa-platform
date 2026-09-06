@@ -2,6 +2,7 @@ package com.ecommerce.monolith.payment.dto;
 
 import com.ecommerce.monolith.payment.entity.Payment;
 import com.ecommerce.monolith.payment.entity.PaymentReconciliationTask;
+import com.ecommerce.monolith.payment.entity.PaymentWebhookEvent;
 import com.ecommerce.monolith.payment.repository.PaymentOrderMismatchProjection;
 import lombok.Builder;
 import lombok.Data;
@@ -105,6 +106,40 @@ public class PaymentResponse {
                     .pgOccurredAt(task.getPgOccurredAt())
                     .createdAt(task.getCreatedAt())
                     .updatedAt(task.getUpdatedAt())
+                    .build();
+        }
+    }
+
+    @Data
+    @Builder
+    public static class PaymentWebhookEventInfo {
+        private Long webhookEventId;
+        private String pgEventId;
+        private String pgDeliveryId;
+        private String eventType;
+        private Long orderId;
+        private String pgTransactionId;
+        private BigDecimal amount;
+        private PaymentWebhookEvent.WebhookStatus status;
+        private String failureReason;
+        private LocalDateTime pgOccurredAt;
+        private LocalDateTime receivedAt;
+        private LocalDateTime processedAt;
+
+        public static PaymentWebhookEventInfo from(PaymentWebhookEvent event) {
+            return PaymentWebhookEventInfo.builder()
+                    .webhookEventId(event.getWebhookEventId())
+                    .pgEventId(event.getPgEventId())
+                    .pgDeliveryId(event.getPgDeliveryId())
+                    .eventType(event.getEventType().name())
+                    .orderId(event.getOrderId())
+                    .pgTransactionId(event.getPgTransactionId())
+                    .amount(event.getAmount())
+                    .status(event.getStatus())
+                    .failureReason(event.getFailureReason())
+                    .pgOccurredAt(event.getPgOccurredAt())
+                    .receivedAt(event.getReceivedAt())
+                    .processedAt(event.getProcessedAt())
                     .build();
         }
     }

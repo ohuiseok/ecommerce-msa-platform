@@ -10,8 +10,10 @@ import com.ecommerce.monolith.payment.dto.PaymentRequest;
 import com.ecommerce.monolith.payment.dto.PaymentResponse;
 import com.ecommerce.monolith.payment.entity.Payment;
 import com.ecommerce.monolith.payment.entity.PaymentReconciliationTask;
+import com.ecommerce.monolith.payment.entity.PaymentWebhookEvent;
 import com.ecommerce.monolith.payment.repository.PaymentRepository;
 import com.ecommerce.monolith.payment.repository.PaymentReconciliationTaskRepository;
+import com.ecommerce.monolith.payment.repository.PaymentWebhookEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,7 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final PaymentReconciliationTaskRepository reconciliationTaskRepository;
+    private final PaymentWebhookEventRepository webhookEventRepository;
     private final OrderService orderService;
     private final MockPgClient mockPgClient;
 
@@ -144,6 +147,84 @@ public class PaymentService {
                 task.getOrderId(), task.getUserId(), task.getPgEventId(), task.getPgTransactionId(), task.getAmount(), task.getTaskId());
 
         return Optional.of(PaymentResponse.PaymentReconciliationTaskInfo.from(task));
+    }
+
+    public PaymentResponse.PaymentWebhookEventInfo processPaymentWebhookEvent(MockPgClient.PgEvent event) {
+        Optional<PaymentWebhookEvent> existing = webhookEventRepository.findByPgEventId(event.eventId());
+        if (existing.isPresent()) {
+            PaymentWebhookEvent webhookEvent = existing.get();
+            log.info("event=payment.webhook_duplicate pgEventId={} pgDeliveryId={} originalDeliveryId={} status={}",
+                    event.eventId(), event.deliveryId(), webhookEvent.getPgDeliveryId(), webhookEvent.getStatus());
+            return PaymentResponse.PaymentWebhookEventInfo.from(webhookEvent);
+        }
+
+        PaymentWebhookEvent webhookEvent = webhookEventRepository.save(PaymentWebhookEvent.received(event));
+        try {
+            reflectWebhookEvent(event, webhookEvent);
+        } catch (RuntimeException e) {
+            webhookEvent.markFailed(e.getMessage());
+            log.warn("event=payment.webhook_failed pgEventId={} pgDeliveryId={} orderId={} reason={}",
+                    event.eventId(), event.deliveryId(), event.orderId(), e.getMessage());
+        }
+
+        PaymentWebhookEvent savedEvent = webhookEventRepository.save(webhookEvent);
+        return PaymentResponse.PaymentWebhookEventInfo.from(savedEvent);
+    }
+
+    private void reflectWebhookEvent(MockPgClient.PgEvent event, PaymentWebhookEvent webhookEvent) {
+        OrderResponse.OrderInfo order = orderService.getOrder(event.orderId());
+
+        if (event.type() == MockPgClient.PgEventType.PAYMENT_APPROVED) {
+            reflectApprovedWebhook(event, webhookEvent, order);
+            return;
+        }
+
+        if (event.type() == MockPgClient.PgEventType.PAYMENT_FAILED) {
+            reflectFailedWebhook(event, webhookEvent, order);
+            return;
+        }
+
+        webhookEvent.markIgnored("현재 단계에서는 결제 취소 웹훅의 후속 상태 변경을 수행하지 않습니다.");
+        log.info("event=payment.webhook_ignored pgEventId={} pgDeliveryId={} orderId={} type={}",
+                event.eventId(), event.deliveryId(), event.orderId(), event.type());
+    }
+
+    private void reflectApprovedWebhook(
+            MockPgClient.PgEvent event,
+            PaymentWebhookEvent webhookEvent,
+            OrderResponse.OrderInfo order
+    ) {
+        if (order.getStatus() == Order.OrderStatus.PENDING) {
+            orderService.markOrderConfirmed(order.getOrderId());
+            webhookEvent.markProcessed();
+            log.info("event=payment.webhook_approved_processed pgEventId={} pgDeliveryId={} orderId={} userId={}",
+                    event.eventId(), event.deliveryId(), order.getOrderId(), order.getUserId());
+            return;
+        }
+
+        if (order.getStatus() == Order.OrderStatus.CANCELLED) {
+            registerLateApprovedPaymentForReconciliation(event);
+            webhookEvent.markProcessed();
+            return;
+        }
+
+        webhookEvent.markIgnored("승인 웹훅을 반영할 수 없는 주문 상태입니다: " + order.getStatus());
+    }
+
+    private void reflectFailedWebhook(
+            MockPgClient.PgEvent event,
+            PaymentWebhookEvent webhookEvent,
+            OrderResponse.OrderInfo order
+    ) {
+        if (order.getStatus() == Order.OrderStatus.PENDING) {
+            orderService.cancelPendingOrderAfterPaymentFailure(order.getOrderId());
+            webhookEvent.markProcessed();
+            log.warn("event=payment.webhook_failed_processed pgEventId={} pgDeliveryId={} orderId={} userId={} reason={}",
+                    event.eventId(), event.deliveryId(), order.getOrderId(), order.getUserId(), event.failureReason());
+            return;
+        }
+
+        webhookEvent.markIgnored("실패 웹훅을 반영할 수 없는 주문 상태입니다: " + order.getStatus());
     }
 
     @Transactional(readOnly = true)

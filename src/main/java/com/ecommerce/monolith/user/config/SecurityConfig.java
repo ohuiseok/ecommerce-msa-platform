@@ -39,6 +39,7 @@ public class SecurityConfig {
                         "/api/orders/health",
                         "/api/cart/health",
                         "/api/payments/health",
+                        "/api/payments/webhooks/mock-pg",
                         "/api/coupons/health",
                         "/api/reviews/health",
                         "/actuator/**",

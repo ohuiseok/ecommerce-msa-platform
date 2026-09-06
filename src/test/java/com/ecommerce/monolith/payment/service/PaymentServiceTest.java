@@ -10,8 +10,10 @@ import com.ecommerce.monolith.payment.dto.PaymentRequest;
 import com.ecommerce.monolith.payment.dto.PaymentResponse;
 import com.ecommerce.monolith.payment.entity.Payment;
 import com.ecommerce.monolith.payment.entity.PaymentReconciliationTask;
+import com.ecommerce.monolith.payment.entity.PaymentWebhookEvent;
 import com.ecommerce.monolith.payment.repository.PaymentRepository;
 import com.ecommerce.monolith.payment.repository.PaymentReconciliationTaskRepository;
+import com.ecommerce.monolith.payment.repository.PaymentWebhookEventRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -38,6 +40,9 @@ class PaymentServiceTest {
 
     @Mock
     private PaymentReconciliationTaskRepository reconciliationTaskRepository;
+
+    @Mock
+    private PaymentWebhookEventRepository webhookEventRepository;
 
     @Mock
     private OrderService orderService;
@@ -374,6 +379,53 @@ class PaymentServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getTaskId()).isEqualTo(100L);
         assertThat(result.get(0).getStatus()).isEqualTo(PaymentReconciliationTask.ReconciliationStatus.OPEN);
+    }
+
+    @Test
+    void processPaymentWebhookEventConfirmsPendingOrderForApprovedEvent() {
+        MockPgClient.PgEvent event = MockPgClient.PgEvent.approved(1L, "MOCK-TX-1", BigDecimal.valueOf(12000));
+
+        when(webhookEventRepository.findByPgEventId(event.eventId())).thenReturn(Optional.empty());
+        when(webhookEventRepository.save(any(PaymentWebhookEvent.class))).thenAnswer(invocation -> {
+            PaymentWebhookEvent webhookEvent = invocation.getArgument(0);
+            webhookEvent.setWebhookEventId(200L);
+            return webhookEvent;
+        });
+        when(orderService.getOrder(1L)).thenReturn(OrderResponse.OrderInfo.builder()
+                .orderId(1L)
+                .userId(10L)
+                .totalAmount(BigDecimal.valueOf(12000))
+                .status(Order.OrderStatus.PENDING)
+                .build());
+
+        PaymentResponse.PaymentWebhookEventInfo result = paymentService.processPaymentWebhookEvent(event);
+
+        assertThat(result.getWebhookEventId()).isEqualTo(200L);
+        assertThat(result.getPgEventId()).isEqualTo(event.eventId());
+        assertThat(result.getPgDeliveryId()).isEqualTo(event.deliveryId());
+        assertThat(result.getStatus()).isEqualTo(PaymentWebhookEvent.WebhookStatus.PROCESSED);
+        assertThat(result.getProcessedAt()).isNotNull();
+        verify(orderService).markOrderConfirmed(1L);
+    }
+
+    @Test
+    void processPaymentWebhookEventReturnsExistingResultForDuplicateDeliveryWithoutStateChange() {
+        MockPgClient.PgEvent original = MockPgClient.PgEvent.approved(1L, "MOCK-TX-1", BigDecimal.valueOf(12000));
+        MockPgClient.PgEvent duplicate = original.redelivered();
+        PaymentWebhookEvent existing = PaymentWebhookEvent.received(original);
+        existing.setWebhookEventId(200L);
+        existing.markProcessed();
+
+        when(webhookEventRepository.findByPgEventId(original.eventId())).thenReturn(Optional.of(existing));
+
+        PaymentResponse.PaymentWebhookEventInfo result = paymentService.processPaymentWebhookEvent(duplicate);
+
+        assertThat(result.getWebhookEventId()).isEqualTo(200L);
+        assertThat(result.getPgEventId()).isEqualTo(original.eventId());
+        assertThat(result.getPgDeliveryId()).isEqualTo(original.deliveryId());
+        assertThat(result.getStatus()).isEqualTo(PaymentWebhookEvent.WebhookStatus.PROCESSED);
+        verify(orderService, never()).markOrderConfirmed(any());
+        verify(webhookEventRepository, never()).save(any());
     }
 
     private record TestMismatchProjection(
